@@ -455,7 +455,13 @@ class IVDataProcess:
         I = self.segms[0]['I']
         V_diff = np.diff(V)
         minarg = np.argwhere(V_diff > self.V_g/3)[0][0]
-        maxarg = np.argwhere(V_diff[minarg:] < self.V_g/3)[0][0] + minarg
+        #maxarg = np.argwhere(V_diff[minarg:] < self.V_g/3)[0][0] + minarg
+        # 连续3个点小于V_g/3才有效, 是否要考虑绝对值防止负阻?
+        for n in range(minarg, len(V_diff)-3):
+            if V_diff[n] < self.V_g/3 and V_diff[n+1] < self.V_g/3 and V_diff[n+2] < self.V_g/3:
+                maxarg = n
+                break
+                
         V_diff = np.diff(V[minarg:maxarg+1]).flatten()
         
         # 使用优化方法最小化误差
