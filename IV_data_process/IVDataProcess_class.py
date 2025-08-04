@@ -251,9 +251,12 @@ class IVDataProcess:
         self.curve_type = curve_type
         return curve_type
     
-    def get_Ic(self) -> tuple[float, float]:
+    def get_Ic(self, Ic_ests: list = [None, None]) -> tuple[float, float]:
         """
         获取Ic_fitp和Ic_fitm, 即正向和负向的临界电流. 对于'R'类型的IV曲线, Ic_fitp和Ic_fitm都是0.0. 对于'JJu'和'JJo'类型的IV曲线, Ic_fitph和Ic_fitm由直流电阻和差分电阻的转角决定.
+
+        Parameters:
+            Ic_ests(list): 初始估计的Ic值, 用于拟合Ic_fitp和Ic_fitm. 单位为A. 如果不指定, 则默认使用[None, None], 即不使用初始估计值. 拟合时会在Ic_ests的±15%范围内搜索最优解, 如果±15%内不足3个数据点, 则.
 
         Returns:
             Ic_fitp(float): 正向临界电流.
@@ -278,7 +281,25 @@ class IVDataProcess:
                 if (self.curve_type == 'JJu' or self.curve_type == 'JJa') and (n==1 or n==3): #回滞结的回滞段没法判断Ic
                     Ic_seg[n] = Ic_seg[n-1]
                     continue
+
                 I, V = seg['I'], seg['V']
+
+                if (n==0 or n==1) and Ic_ests[0] is not None:
+                    mask = (I>Ic_ests[0]*0.85) & (I<Ic_ests[0]*1.15)
+                    if len(I[mask]) < 3: #不足3个点则补齐
+                        mask = np.argsort(abs(I-Ic_ests[0]))[:3]
+                        mask = np.sort(mask)
+                    V = V[mask]
+                    I = I[mask]
+                    print(I)
+                elif (n==2 or n==3) and Ic_ests[1] is not None:
+                    mask = (I<Ic_ests[1]*0.85) & (I>Ic_ests[1]*1.15)
+                    if len(I[mask]) < 3: #不足3个点则补齐
+                        mask = np.argsort(abs(I-Ic_ests[1]))[:3]
+                        mask = np.sort(mask)
+                    V = V[mask]
+                    I = I[mask]
+                
                 V_diff = abs(np.diff(V)) #电压差分
                 if self.curve_type == 'JJa':
                     I_diff = abs(np.diff(I))*1e3 # JJa的V一般很大, 因此需要同步提升I的单位, 以便计算转角
