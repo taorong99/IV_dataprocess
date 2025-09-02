@@ -276,13 +276,14 @@ class IVDataProcess:
                 self.IVdata_split_4_segments(self.I_data, self.V_data)
             IV_segments = self.segms
             
-            Ic_seg = np.zeros(4) #len(IV_segments)=4
+            Ic_seg = np.array([0.0,0.0,-0.0,-0.0]) #len(IV_segments)=4
             for n, seg in enumerate(IV_segments):
                 if (self.curve_type == 'JJu' or self.curve_type == 'JJa') and (n==1 or n==3): #回滞结的回滞段没法判断Ic
                     Ic_seg[n] = Ic_seg[n-1]
                     continue
-
                 I, V = seg['I'], seg['V']
+                if len(I) <= 2:
+                    continue
 
                 if (n==0 or n==1) and Ic_ests[0] is not None:
                     mask = (I>Ic_ests[0]*0.85) & (I<Ic_ests[0]*1.15)
@@ -291,7 +292,6 @@ class IVDataProcess:
                         mask = np.sort(mask)
                     V = V[mask]
                     I = I[mask]
-                    print(I)
                 elif (n==2 or n==3) and Ic_ests[1] is not None:
                     mask = (I<Ic_ests[1]*0.85) & (I>Ic_ests[1]*1.15)
                     if len(I[mask]) < 3: #不足3个点则补齐
@@ -314,8 +314,8 @@ class IVDataProcess:
                 index_end = -n_convolve+1 if n_convolve > 1 else len(phi)+1
                 Ic_seg[n] = I[np.argmin(phi[n_convolve-1:index_end]) + n_convolve-1]
 
-            Ic_fitp = min(Ic_seg[Ic_seg > 0])
-            Ic_fitm = max(Ic_seg[Ic_seg < 0])
+            Ic_fitp = min(Ic_seg[0], Ic_seg[1]) 
+            Ic_fitm = max(Ic_seg[2], Ic_seg[3])
         self.Ic_fitp, self.Ic_fitm = Ic_fitp, Ic_fitm
         self.fit_result[0], self.fit_result[1] = Ic_fitp, Ic_fitm
         return (Ic_fitp, Ic_fitm)
@@ -367,8 +367,14 @@ class IVDataProcess:
 
             #-------------Rp和Rm拟合-------------#
             try:
-                R_fitp, Vintcp_p, r_value, p_value, std_err = linregress(I_data_fitp, V_data_fitp) #斜率、截距、相关系数r、p值和标准误差。
-                R_fitm, Vintcp_m, r_value, p_value, std_err = linregress(I_data_fitm, V_data_fitm) #斜率、截距、相关系数r、p值和标准误差。
+                if len(I_data_fitp) > 3:
+                    R_fitp, Vintcp_p, r_value, p_value, std_err = linregress(I_data_fitp, V_data_fitp) #斜率、截距、相关系数r、p值和标准误差。
+                else:
+                    R_fitp, Vintcp_p = 0.0, 0.0
+                if len(I_data_fitm) > 3:
+                    R_fitm, Vintcp_m, r_value, p_value, std_err = linregress(I_data_fitm, V_data_fitm) #斜率、截距、相关系数r、p值和标准误差。
+                else:
+                    R_fitm, Vintcp_m = 0.0, 0.0
             except Exception as e:
                 print(e)
                 print('R fitting error')
@@ -405,6 +411,8 @@ class IVDataProcess:
         Rsg_result = [0.0] * 6
 
         for n, I, V, V_sg in zip([0, 1], [Ip, Im], [Vp, Vm], [self.V_sg, -self.V_sg]):
+            if len(I) < 2:
+                continue
             if V_sg in V:
                 I_sg = I[V == V_sg][0]
                 V1, V2 = V_sg, V_sg
@@ -613,7 +621,12 @@ class IVDataProcess:
 
         # V_g和Rsg示意线
         if curve_type == 'JJu':
-            plt.vlines((V_g/V_plot_multiplier, -V_g/V_plot_multiplier), I_plot.min(), I_plot.max(), linestyles='dashed', color='gray')
+            Vg_plot = [V_g/V_plot_multiplier, -V_g/V_plot_multiplier]
+            if self.V_data.max() < V_g*0.75:
+                Vg_plot.pop(0)
+            if self.V_data.min() > -V_g*0.75:
+                Vg_plot.pop(-1)
+            plt.vlines((Vg_plot), I_plot.min(), I_plot.max(), linestyles='dashed', color='gray')
             try:
                 plt.plot(V[I>0]/V_plot_multiplier, V[I>0]/self.Rsg_p/I_plot_multiplier, label=f'Rsg_p={self.Rsg_p:.1f} Ohm, Rsg_m={self.Rsg_m:.1f} Ohm', linestyle=':', color='black')
                 plt.plot(V[I<0]/V_plot_multiplier, V[I<0]/self.Rsg_m/I_plot_multiplier, linestyle=':', color='black')
