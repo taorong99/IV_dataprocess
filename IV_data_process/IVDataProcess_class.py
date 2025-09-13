@@ -217,8 +217,8 @@ class IVDataProcess:
 
         self.V_offset = V_offset
         self.V_data = self.V_data - self.V_offset
-        return V_offset 
-    
+        return V_offset
+
     def curve_classifier(self) -> str:
         """
         判断IV曲线的类型, 并返回. IV曲线的类型有R, JJu, JJo, JJa四种, 将来支持JJs等. 首先根据I_data和V_data在首尾的20个点线性拟合结果, 25%以内认为是R. 如果不是R, 则根据V_data的回滞绝对值是否大于V_g/4和1.5Vg判断是JJu还是JJo.
@@ -251,6 +251,33 @@ class IVDataProcess:
         self.curve_type = curve_type
         return curve_type
     
+    def get_phi_halfpi(self, I: np.ndarray, V: np.ndarray) -> list:
+        """
+        计算IV曲线中转角接近90度的点的电流值. 这里的IV曲线只能是一段, 或者说是单向的.
+
+        Parameters:
+            I(np.ndarray): 电流数据.
+            V(np.ndarray): 电压数据.
+
+        Returns:
+            index_and_phi(list): 一个列表, 第一个元素是转角接近90度的点的索引, 第二个元素是该点的转角值(单位:弧度).
+        """        
+        V_diff = abs(np.diff(V)) #电压差分
+        if self.curve_type == 'JJa':
+            I_diff = abs(np.diff(I))*1e3 # JJa的V一般很大, 因此需要同步提升I的单位, 以便计算转角
+        else:
+            I_diff = abs(np.diff(I)) #电流差分 
+        R_diff = V_diff/(I_diff+1e-9) + 1e-9 # 1e-9是为了避免分母为0
+        R_0 = abs(V/(I+1e-9)) + 1e-9 # 1e-9是为了避免分母为0
+
+        #取IV曲线上转角接近90度的点, 即直流电阻和差分电阻曲线夹角最小的点
+        phi = np.pi + np.arctan(1/R_diff) - np.arctan(1/R_0[0:-1])
+        phi = (phi + np.pi) % (2 * np.pi) - np.pi #将phi限制在[-pi,pi]范围内
+        phi_diff90 = abs(abs(phi - np.pi/2))#/(I[1:]+1e-10)) # 1e-10是为了避免分母为0
+
+        index_halfpi = np.argmin(phi_diff90)
+        return [index_halfpi, phi[index_halfpi]]
+
     def get_Ic(self, Ic_ests: list = [None, None]) -> tuple[float, float]:
         """
         获取Ic_fitp和Ic_fitm, 即正向和负向的临界电流. 对于'R'类型的IV曲线, Ic_fitp和Ic_fitm都是0.0. 对于'JJu'和'JJo'类型的IV曲线, Ic_fitph和Ic_fitm由直流电阻和差分电阻的转角决定.
@@ -277,13 +304,28 @@ class IVDataProcess:
             IV_segments = self.segms
             
             Ic_seg = np.array([0.0,0.0,-0.0,-0.0]) #len(IV_segments)=4
+            phi_seg = Ic_seg.copy() #存储Ic对应的转角值, 弧度
             for n, seg in enumerate(IV_segments):
                 if (self.curve_type == 'JJu' or self.curve_type == 'JJa') and (n==1 or n==3): #回滞结的回滞段没法判断Ic
                     Ic_seg[n] = Ic_seg[n-1]
                     continue
+
                 I, V = seg['I'], seg['V']
                 if len(I) <= 2:
                     continue
+
+                # I,V按照I绝对值从小到达排列, 并且归一化
+                I, V = zip(*sorted(zip(I, V), key=lambda x: abs(x[0])))
+                I, V = np.array(I), np.array(V)
+                I_norm, V_norm = abs(I).max(), abs(V).max()
+                I = I/I_norm
+                V = V/V_norm
+
+                if n_convolve > 1:
+                    V = np.convolve(V, np.ones(n_convolve)/n_convolve, mode='same')
+                    index_convo = np.ceil(n_convolve/2).astype(int)
+                    I = I[index_convo-1: -(index_convo-1)].copy()
+                    V = V[index_convo-1: -(index_convo-1)].copy()
 
                 if (n==0 or n==1) and Ic_ests[0] is not None:
                     mask = (I>Ic_ests[0]*0.85) & (I<Ic_ests[0]*1.15)
@@ -300,22 +342,28 @@ class IVDataProcess:
                     V = V[mask]
                     I = I[mask]
                 
-                V_diff = abs(np.diff(V)) #电压差分
-                if self.curve_type == 'JJa':
-                    I_diff = abs(np.diff(I))*1e3 # JJa的V一般很大, 因此需要同步提升I的单位, 以便计算转角
-                else:
-                    I_diff = abs(np.diff(I)) #电流差分 
-                R_diff = V_diff/(I_diff+1e-9) + 1e-9 # 1e-9是为了避免分母为0
-                R_0 = abs(V/(I+1e-9)) + 1e-9 # 1e-9是为了避免分母为0
-                #对R_diff进行平滑处理, 取3个点已经开始对underdump的结果产生了轻微影响.
-                R_diff = np.convolve(R_diff, np.ones(n_convolve)/n_convolve, mode='same')
-                #取IV曲线上转角接近90度的点, 即直流电阻和差分电阻曲线夹角最小的点
-                phi = np.pi + np.arctan(1/R_diff) - np.arctan(1/R_0[0:-1])
-                index_end = -n_convolve+1 if n_convolve > 1 else len(phi)+1
-                Ic_seg[n] = I[np.argmin(phi[n_convolve-1:index_end]) + n_convolve-1]
+                index_halfpi, phi_seg[n] = self.get_phi_halfpi(I, V)
 
-            Ic_fitp = min(Ic_seg[0], Ic_seg[1]) 
-            Ic_fitm = max(Ic_seg[2], Ic_seg[3])
+                # 对于JJo, 如果大于Ic的点, 存在连续两个点的V小于Ic点的V, 则在Ic,Imax之间再找一轮Ic
+                if self.curve_type == 'JJo':
+                    for m in range(10):
+                        I_above_Ic = I[index_halfpi+1:]
+                        V_above_Ic = V[index_halfpi+1:]
+                        for i in range(len(I_above_Ic)-1):
+                            index_halfpi1 = 0
+                            if abs(V_above_Ic[i]) < abs(V[index_halfpi+1]) and abs(V_above_Ic[i+1]) < abs(V[index_halfpi+1]):
+                                index_halfpi1, phi_seg[n] = self.get_phi_halfpi(I_above_Ic, V_above_Ic)
+                                index_halfpi = index_halfpi + 1 + index_halfpi1
+                                break
+                        if index_halfpi1 == 0:
+                            print(f'Recalculate Ic for JJo. Seg number: {n}, iteration times: {m}') if m>0 else None
+                            break
+    
+                Ic_seg[n] = I[index_halfpi]* I_norm
+                # print(phi_seg[n], Ic_seg[n])
+
+            Ic_fitp = Ic_seg[np.argmin([abs(phi_seg[0]-np.pi/2), abs(phi_seg[1]-np.pi/2)])]
+            Ic_fitm = Ic_seg[2+np.argmin([abs(phi_seg[2]-np.pi/2), abs(phi_seg[3]-np.pi/2)])]
         self.Ic_fitp, self.Ic_fitm = Ic_fitp, Ic_fitm
         self.fit_result[0], self.fit_result[1] = Ic_fitp, Ic_fitm
         return (Ic_fitp, Ic_fitm)
