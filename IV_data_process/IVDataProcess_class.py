@@ -359,6 +359,37 @@ class IVDataProcess:
 
         self.curve_type = curve_type
         return curve_type
+
+    def get_Vg(self) -> float:
+        """
+        根据正向扫描的回滞段得到Vg值.
+        """
+        if self.curve_type != 'JJu' and self.curve_type != 'JJa':
+            return 0.0
+        if not hasattr(self, 'segms'):
+            self.IVdata_split_4_segments(self.I_data, self.V_data)
+        IV_segments = self.segms
+
+        I_hyst = IV_segments[1]['I'] #回滞段的电流
+        V_hyst = IV_segments[1]['V'] #回滞段的电压
+        if len(I_hyst) < 2 or len(V_hyst) < 2:
+            print('No hysteresis data for Vg calculation.')
+            return 0.0
+        I_diff = np.diff(I_hyst)
+        V_diff = np.diff(V_hyst)
+        R_diff = V_diff/(I_diff+1e-9) + 1e-9 # 1e-9是为了避免分母为0
+        # 移除电阻离群点
+        R_diff[np.abs(R_diff - np.median(R_diff)) > 3*np.std(R_diff)] = np.nan
+        # R_diff最大点对应的电压取为Vg, 后1/4点赋nan, 以免影响判断
+        R_diff[-len(R_diff)//4:] = np.nan
+        Vg_fit = V_hyst[np.nanargmax(R_diff)]
+
+        # plt.figure()
+        # plt.plot(I_hyst[1:], R_diff, 'o-', markersize=3, label='R_diff')
+        # plt.show()
+
+        return Vg_fit
+
     
     def get_phi_halfpi(self, I: np.ndarray, V: np.ndarray) -> list:
         """
@@ -648,6 +679,11 @@ class IVDataProcess:
                 maxarg = n
                 break
             maxarg = len(V_diff) - 1 # 如果没有找到, 则取到最后一个点
+
+        if self.get_Vg() != 0.0:
+            Vg_index = np.argmin(abs(V - self.get_Vg()))
+            if maxarg > Vg_index:
+                maxarg = Vg_index
                 
         V_diff = np.diff(V[minarg:maxarg+1]).flatten()
         
