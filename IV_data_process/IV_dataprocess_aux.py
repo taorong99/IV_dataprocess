@@ -7,9 +7,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 
-from regex import R
-
-
 def create_table(filepaths: list, fit_results: list[np.ndarray], curve_types: list, Rsg_results, array_params, save_table=False):
     """
     使用matplotlib来创建一个表格, 将拟合结果显示在表格中.
@@ -82,20 +79,28 @@ try:
     from tkinter import filedialog
     def select_files():
         """
-        使用tkinter来选择文件.
+        使用tkinter来选择文件，并确保文件选择对话框显示在最前面
         """
-        # 创建一个隐藏的主窗口
         root = tk.Tk()
-        root.withdraw()  # 隐藏主窗口
-
-        # 打开文件选择对话框
+        root.withdraw()
+        
+        # 临时创建一个可见的顶级窗口来承载对话框
+        top = tk.Toplevel(root)
+        top.withdraw()
+        top.attributes('-topmost', True)
+        
+        # 使用这个顶级窗口来创建文件对话框
         filepaths = filedialog.askopenfilenames(
+            parent=top,
             title="Select a file",
-            filetypes=[("Data files", ("*.txt", "*.csv")), ("Text files", "*.txt"), ("Csv files", "*.csv"), ("All files", "*.*")]
+            filetypes=[("Data files", ("*.txt", "*.csv")), 
+                    ("Text files", "*.txt"), 
+                    ("Csv files", "*.csv"), 
+                    ("All files", "*.*")]
         )
-
+        
+        top.destroy()
         root.destroy()
-
         return filepaths
 except:
     pass
