@@ -211,13 +211,122 @@ class IVDataProcess:
             V_offset_calarray = V_offset_calarray[np.abs(zscore(V_offset_calarray)) < 2]
 
         V_offset = np.mean(V_offset_calarray)
-              
+        # print('V_offset calculated from I<10uA data:', V_offset)
         if abs(V_offset) < V_offset_threshold:
             V_offset = 0.0
 
+        self.V_noise = np.std(V_offset_calarray) * 3
         self.V_offset = V_offset
         self.V_data = self.V_data - self.V_offset
         return V_offset
+    
+    def remove_offset(self, I_offset_threshold=1e-6, V_offset_threshold=0.01e-3):
+        """
+        取出I_data和V_data中的offset. JJa和JJu曲线使用I下降段的数据, 其他曲线使用所有数据.
+        如果是半边扫描的数据, 即I>0或I<0的数据点不足2个, 则根据I最接近0的两个点来计算V_offset.
+        阈值和最大值的0.01倍中较小的作为有效阈值.
+        如果是正负扫描的数据, 则将正负段分为对照组与数据处理组, 用对照组中的每个I, 在数据处理组中进行插值, 然后记录结果差, V_offset就是结果差的均值. 处理完V_offset后, 再用同样的方法计算I_offset. 
+        对于实际测试数据的特点, 必须要先去除V_offset, 才能有效计算I_offset.
+        
+        Parameters:
+            I_offset_threshold(float): I_offset阈值, 默认为1e-6A. 该阈值和0.01倍最大数据中的较小者作为有效阈值, 计算得到的I_offset值大于有效阈值才有效. 否则I_offset=0.
+            V_offset_threshold(float): V_offset阈值, 默认为0.01e-3V. 该阈值和0.01倍最大数据中的较小者作为有效阈值, 计算得到的V_offset值大于有效阈值才有效. 否则V_offset=0.
+        Returns:
+            I_offset(float): I_offset值.
+            V_offset(float): V_offset值.
+        """
+        if not hasattr(self, 'curve_type'):
+            self.curve_classifier()
+        if not hasattr(self, 'segms'):
+                self.IVdata_split_4_segments(self.I_data, self.V_data)
+        if self.curve_type == 'JJa' or self.curve_type == 'JJu':
+            I_calarray = np.concatenate([self.segms[1]['I'], self.segms[3]['I']])
+            V_calarray = np.concatenate([self.segms[1]['V'], self.segms[3]['V']])
+            print(len(I_calarray[I_calarray>0]), len(I_calarray[I_calarray<0]))
+        else:            
+            I_calarray = self.I_data
+            V_calarray = self.V_data
+        # 按照I递增来排序, 因为后面插值要求递增
+        # I_calarray, V_calarray = zip(*sorted(zip(I_calarray, V_calarray), key=lambda x: x[0]))
+        # I_calarray, V_calarray = np.array(I_calarray), np.array(V_calarray)
+        # plt.figure()
+        # plt.plot(V_calarray, I_calarray, 'o-', markersize=3)
+        # plt.show()
+        
+        if len(I_calarray[I_calarray>0]) < 2 or len(I_calarray[I_calarray<0]) < 2:
+            # 如果是半边扫描的数据, 即I>0或I<0的数据点不足2个, 则只根据I最接近0的两个点来计算V_offset.
+            I_calarray = I_calarray[np.argsort(abs(I_calarray))[:2]]
+            V_calarray = V_calarray[np.argsort(abs(I_calarray))[:2]]
+            V_offset = np.mean(V_calarray)
+            if abs(V_offset) < V_offset_threshold and abs(V_offset) < 0.01*abs(V_calarray).max():
+                V_offset = 0.0
+            self.V_data = self.V_data - V_offset
+            self.V_offset = V_offset
+            self.I_offset = 0.0
+            print('V_offset calculated from two branches:', V_offset)
+            self.IVdata_split_4_segments(self.I_data, self.V_data)
+            return V_offset, 0.0
+        
+        # 去除I_calarray和V_calarray中符号相异的点
+        mask = (I_calarray >= 0) & (V_calarray >= 0) | (I_calarray <= 0) & (V_calarray <= 0)
+        I_calarray = I_calarray[mask]
+        V_calarray = V_calarray[mask]
+
+        # 长度小的作为对照组, 长度大的作为数据处理组
+        if len(I_calarray[I_calarray>0]) <= len(I_calarray[I_calarray<0]):
+            I_control = I_calarray[I_calarray>0]
+            V_control = V_calarray[I_calarray>0]
+            I_process = I_calarray[I_calarray<0]
+            V_process = V_calarray[I_calarray<0]
+        else:
+            I_control = I_calarray[I_calarray<0]
+            V_control = V_calarray[I_calarray<0]
+            I_process = I_calarray[I_calarray>0]
+            V_process = V_calarray[I_calarray>0]
+
+        # 先粗矫一轮offset, 根据对照组的最远点, 找到数据处理组中最接近的点, 计算两者的平均值作为粗矫offset
+        V_offset_rough = 0.0
+        pass
+        
+        # 对于对照组中的每个I, 在数据处理组中进行插值, 然后记录结果差, 插值用的I必须在±90%范围内
+        V_offs = []
+        sort_indeices = np.argsort(I_process)
+        I_process, V_process = I_process[sort_indeices], V_process[sort_indeices]
+        for i, v in zip(I_control, V_control):
+            mask = (abs(I_process)>abs(i*0.9)) & (abs(I_process)<abs(i*1.1))
+            # print(i,I_process)
+            if len(I_process[mask]) >= 2:
+                V_interp = np.interp(-i, I_process[mask], V_process[mask])
+                # print(i,v,V_interp)
+                V_offs.append(0.5*(v + V_interp))
+        #去除离群点
+        V_offs = np.array(V_offs)
+        V_offs = V_offs[abs(V_offs - np.mean(V_offs)) < 2*np.std(V_offs)]
+        V_offset = np.mean(V_offs) if len(V_offs) > 0 else 0.0
+        # if abs(V_offset) < V_offset_threshold and abs(V_offset) < 0.01*abs(self.V_data).max():
+        #     V_offset = 0.0
+        # self.V_offset = V_offset
+        self.V_data = self.V_data - V_offset
+        print('V_offset calculated from two branches:', V_offset)
+
+        # 处理完V_offset后, 再用同样的方法计算I_offset. 这里必须要先去除V_offset, 才能有效计算I_offset.
+        V_control = V_control - V_offset
+        V_process = V_process - V_offset
+        I_offs = []
+        sort_indeices = np.argsort(V_process)
+        I_process, V_process = I_process[sort_indeices], V_process[sort_indeices]
+        for i, v in zip(I_control, V_control):
+            mask = (abs(V_process)>abs(v*0.9)) & (abs(V_process)<abs(v*1.1))
+            if len(V_process[mask]) >= 2:
+                I_interp = np.interp(-v, V_process[mask], I_process[mask])
+                I_offs.append(0.5*(i + I_interp))
+        I_offset = np.mean(I_offs) if len(I_offs) > 0 else 0.0
+        # if abs(I_offset) < I_offset_threshold and abs(I_offset) < 0.01*abs(self.I_data).max():
+        #     I_offset = 0.0
+        self.I_data = self.I_data - I_offset
+        print('I_offset calculated from two branches:', I_offset)
+        print(f'V_offset/I_offset: {V_offset/I_offset}')
+        self.IVdata_split_4_segments(self.I_data, self.V_data)
 
     def curve_classifier(self) -> str:
         """
@@ -532,12 +641,13 @@ class IVDataProcess:
         I = self.segms[0]['I']
         V_diff = np.diff(V)
         minarg = np.argwhere(V_diff > self.V_g/3)[0][0]
-        #maxarg = np.argwhere(V_diff[minarg:] < self.V_g/3)[0][0] + minarg
+        # maxarg = np.argwhere(V_diff[minarg:] < self.V_g/3)[0][0] + minarg
         # 连续3个点小于V_g/3才有效, 是否要考虑绝对值防止负阻?
         for n in range(minarg, len(V_diff)-3):
             if V_diff[n] < self.V_g/3 and V_diff[n+1] < self.V_g/3 and V_diff[n+2] < self.V_g/3:
                 maxarg = n
                 break
+            maxarg = len(V_diff) - 1 # 如果没有找到, 则取到最后一个点
                 
         V_diff = np.diff(V[minarg:maxarg+1]).flatten()
         
