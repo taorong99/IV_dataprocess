@@ -13,6 +13,7 @@ import pandas as pd
 from scipy.stats import linregress #线性回归用于拟合R
 from scipy.stats import zscore #计算V_offset时去除离群点用
 from scipy.optimize import minimize
+import os
 
 #plt 显示中文
 plt.rcParams['font.sans-serif'] = ['SimHei']
@@ -93,7 +94,7 @@ class IVDataProcess:
         self.V_g = V_g
         self.V_sg = V_sg
 
-        self.filename = file_path.split('/')[-1]
+        self.filename = os.path.basename(file_path)
         self.V_offset = 0.0
         self.fit_result = np.array([None, None, None, None, None, None])
         self.input_check()
@@ -874,7 +875,7 @@ class IVDataProcess:
         plt.xlim(Ic_array[0] - bin_width, Ic_array[-1] + bin_width)
 
         # 添加标题和轴标签
-        plt.title(self.filename.split('/')[-1]+f' 预估V_g={Vg_optimal*1e3:.3f}mV', fontsize=14)
+        plt.title(self.filename+f' 预估V_g={Vg_optimal*1e3:.3f}mV', fontsize=14)
         plt.xlabel("Ic(" + Ic_suffix + "A)", fontsize=12)
         plt.ylabel(f"结的数目(共{self.num_JJ}个)", fontsize=12)
         if len(Ic_array) > 15:
