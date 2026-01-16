@@ -1,0 +1,24 @@
+<!-- 用户与数据集选择：同一行，占约2/3宽度 -->
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <label class="form-label" title="选择自己的用户，以便查看历史数据">用户名</label>
+    <div class="input-group">
+      <select id="username" class="form-select" title="选择自己的用户，以便查看历史数据"></select>
+      <button id="btnNewUser" class="btn btn-outline-primary" type="button" title="新建用户">
+        +
+      </button>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <label class="form-label" title="每个数据集会统一生成一个对应的参数总结表">数据集</label>
+    <div class="input-group">
+      <select id="dataset" class="form-select" disabled title="每个数据集会统一生成一个对应的参数总结表"></select>
+      <button id="btnNewDataset" class="btn btn-outline-primary" type="button" title="新建数据集">
+        +
+      </button>
+      <button id="btnDeleteDataset" class="btn btn-outline-danger" type="button" title="删除当前数据集" style="display: none;">
+        🗑️
+      </button>
+    </div>
+  </div>
+</div>

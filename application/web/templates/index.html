@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+  {% include "components/header.html" %}
+  {% include "components/controls.html" %}
+  {% include "components/upload.html" %}
+  {% include "components/main_content.html" %}
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/js/main.js"></script>
+{% endblock %}

@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}IV数据简易处理平台{% endblock %}</title>
+  
+  <!-- 网站图标 -->
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+  <link rel="shortcut icon" href="/static/favicon.ico" type="image/x-icon">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    /* 全局样式 */
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      background-color: #f5f7fa;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    
+    .container-fluid {
+      padding: 0 15px;
+      flex: 1;
+    }
+    
+    .section-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #eaeaea;
+    }
+    
+    .upload-section-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 15px;
+    }
+    
+    /* 图片点击效果 */
+    #plot, #summaryTable, .thumb {
+      transition: transform 0.2s ease;
+    }
+    
+    #plot:hover, #summaryTable:hover, .thumb:hover {
+      transform: scale(1.02);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    /* 模态框图片样式 */
+    #modalImage {
+      max-height: 70vh;
+      object-fit: contain;
+    }
+    
+    .modal-xl {
+      max-width: 90%;
+    }
+    
+    /* 处理结果消息样式 */
+    .success {
+      color: #198754;
+      background-color: #d1e7dd;
+      border: 1px solid #badbcc;
+      padding: 10px 15px;
+      border-radius: 6px;
+      margin-top: 10px;
+    }
+    
+    .error {
+      color: #dc3545;
+      background-color: #f8d7da;
+      border: 1px solid #f5c2c7;
+      padding: 10px 15px;
+      border-radius: 6px;
+      margin-top: 10px;
+    }
+    
+    .process-result-container {
+      min-height: 50px;
+    }
+    
+    /* 空状态提示 */
+    .empty-message {
+      text-align: center;
+      color: #6c757d;
+      padding: 30px 15px;
+      font-style: italic;
+      background-color: #f8f9fa;
+      border-radius: 8px;
+      border: 1px dashed #dee2e6;
+    }
+    
+    /* 上传区域整体样式 */
+    .upload-controls-row {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    }
+    
+    /* 控件组优化 */
+    .input-group .btn {
+      min-width: 40px;
+    }
+    
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+      .container-fluid {
+        padding: 0 10px;
+      }
+      
+      .main-content {
+        flex-direction: column;
+        height: auto !important;
+      }
+      
+      .col-3, .col {
+        width: 100% !important;
+        margin-bottom: 20px;
+      }
+    }
+    
+    /* 动画效果 */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* 页脚样式 */
+    .footer {
+      border-top: 1px solid #e9ecef;
+      padding: 0.75rem 0;
+      background-color: #f8f9fa;
+      font-size: 0.8rem;
+      flex-shrink: 0; /* 页脚不收缩 */
+      margin-top: auto; /* 推到底部 */
+      width: 100%;
+    }
+    
+    .footer-content {
+      padding: 8px 0;
+    }
+    
+    .footer a {
+      color: #4361ee;
+      transition: color 0.2s ease;
+      font-size: 0.8rem;
+    }
+    
+    .footer a:hover {
+      color: #3a56d4;
+      text-decoration: underline;
+    }
+    
+    .footer .text-muted {
+      color: #6c757d !important;
+    }
+    
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+      .footer {
+        font-size: 0.7rem;
+        padding: 0.5rem 0;
+      }
+      
+      .footer a {
+        font-size: 0.7rem;
+      }
+      
+      .footer .small {
+        font-size: 0.7rem;
+      }
+      
+      .footer .text-muted {
+        font-size: 0.65rem;
+      }
+    }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <div class="container-fluid">
+    {% block content %}{% endblock %}
+  </div>
+  
+  <!-- 图片放大模态框 -->
+  <div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalTitle">图片预览</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭"></button>
+        </div>
+        <div class="modal-body text-center">
+          <img id="modalImage" src="" alt="放大预览" class="img-fluid">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+          <button type="button" class="btn btn-primary" onclick="downloadModalImage()">下载图片</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% block scripts %}{% endblock %}
+  
+  <!-- 备案信息页脚 -->
+  <footer class="footer">
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-md-8 offset-md-2 text-center">
+          <div class="footer-content">
+            <p class="mb-1 small">
+              © 2025 IV数据简易处理平台 | 
+              <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                湘ICP备2025150577号
+              </a>
+              <span class="mx-1">|</span>
+              <img src="/static/备案图标.png" alt="公安备案图标" style="width: 14px; height: 14px; vertical-align: text-bottom; margin-right: 2px;">
+              <a href="https://beian.mps.gov.cn/#/query/webSearch?code=43112402000158" 
+                 target="_blank" rel="noopener noreferrer" class="text-decoration-none">
+                湘公网安备43112402000158号
+              </a>
+            </p>
+            <p class="small text-muted mb-0" style="font-size: 0.75rem;">
+              本平台仅用于科研数据分析，上传数据请遵守相关法律法规
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+  
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- JSZip库用于打包下载 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  
+  <script>
+    // 图片放大功能
+    function showImageInModal(imageUrl, imageTitle = '图片预览') {
+      const modalImage = document.getElementById('modalImage');
+      const modalTitle = document.getElementById('modalTitle');
+      
+      // 设置图片和标题
+      modalImage.src = imageUrl;
+      modalTitle.textContent = imageTitle;
+      
+      // 显示模态框
+      const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+      modal.show();
+    }
+    
+    // 下载模态框中的图片
+    function downloadModalImage() {
+      const modalImage = document.getElementById('modalImage');
+      const imageUrl = modalImage.src.split('?')[0]; // 去掉查询参数
+      const fileName = imageUrl.split('/').pop().split('?')[0] || 'image.png';
+      
+      const link = document.createElement('a');
+      link.href = imageUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+    
+    // 页面加载完成后为图片添加点击事件
+    document.addEventListener('DOMContentLoaded', function() {
+      // 稍后设置图片点击事件，等待图片加载
+      setTimeout(setupImageClickEvents, 1000);
+    });
+    
+    // 设置图片点击事件
+    function setupImageClickEvents() {
+      // 主图点击放大
+      const plotImg = document.getElementById('plot');
+      if (plotImg) {
+        plotImg.style.cursor = 'zoom-in';
+        plotImg.addEventListener('click', function() {
+          if (plotImg.src && plotImg.src !== '') {
+            const fileName = plotImg.src.split('/').pop().split('?')[0];
+            showImageInModal(plotImg.src, fileName);
+          }
+        });
+      }
+      
+      // 参数总结表点击放大
+      const summaryImg = document.getElementById('summaryTable');
+      if (summaryImg) {
+        summaryImg.style.cursor = 'zoom-in';
+        summaryImg.addEventListener('click', function() {
+          if (summaryImg.src && summaryImg.src !== '') {
+            const fileName = summaryImg.src.split('/').pop().split('?')[0];
+            showImageInModal(summaryImg.src, fileName);
+          }
+        });
+      }
+      
+      // 缩略图点击放大
+      document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('thumb')) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          // 获取对应的原图URL（去掉缩略图的查询参数，使用原始图片）
+          const thumbSrc = e.target.src;
+          const originalSrc = thumbSrc.split('?')[0]; // 去掉防缓存参数
+          const fileName = e.target.alt || 'image.png';
+          
+          showImageInModal(originalSrc, fileName);
+        }
+      });
+    }
+    
+    // 动态添加的图片也需要设置点击事件
+    function setupDynamicImageClick(imgElement) {
+      if (imgElement && (imgElement.id === 'plot' || imgElement.id === 'summaryTable')) {
+        imgElement.style.cursor = 'zoom-in';
+        imgElement.addEventListener('click', function() {
+          if (imgElement.src && imgElement.src !== '') {
+            const fileName = imgElement.src.split('/').pop().split('?')[0];
+            showImageInModal(imgElement.src, fileName);
+          }
+        });
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,233 @@
+<!-- 主要内容区域 -->
+<div class="row main-content" style="height: 500px; min-height: 500px; max-height: 600px; overflow: hidden;">
+  <!-- 左侧：数据集文件 (1/4宽度) -->
+  <div class="col-3" style="height: 100%; display: flex; flex-direction: column;">
+    <div class="section-title">数据集文件</div>
+    <div id="sidebar" style="flex: 1; overflow-y: auto; overflow-x: hidden; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6;">
+      <div id="fileList" style="padding: 15px;"></div>
+    </div>
+  </div>
+
+  <!-- 中间：拟合结果预览 -->
+  <div class="col" style="height: 100%; display: flex; flex-direction: column;">
+    <div class="section-title">拟合结果预览</div>
+    <div id="plot-container" style="flex: 1; display: flex; gap: 20px; overflow: hidden;">
+      <div style="flex: 1; height: 100%; overflow: hidden;">
+        <img id="plot" src="" alt="拟合图像" style="width: 100%; height: 100%; object-fit: contain; border: 1px solid #ccc; padding: 10px; background: white; border-radius: 8px;">
+      </div>
+      <div style="width: 33.33%; height: 100%; display: none; overflow: hidden;" id="summaryContainer">
+        <div style="height: 100%; display: flex; flex-direction: column; background: white; border: 1px solid #ccc; border-radius: 8px; padding: 15px; overflow: hidden;">
+          <div class="summary-title" style="margin-bottom: 10px; font-weight: bold; color: #495057;">参数总结表</div>
+          <div style="flex: 1; min-height: 0; overflow: hidden;">
+            <img id="summaryTable" src="" alt="参数总结表" style="width: 100%; height: 100%; object-fit: contain; border: 1px solid #e9ecef; border-radius: 4px;">
+          </div>
+          <!-- 说明区域 -->
+          <div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef; font-size: 0.85rem;">
+            <p><strong>参数说明：</strong></p>
+            <p>R: 电阻</p>
+            <p>jju: 本征结</p>
+            <p>jjo: 过阻尼结</p>
+            <p>jja: 结阵</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .main-content {
+    display: flex;
+    gap: 20px;
+    height: calc(100vh - 300px); /* 动态计算高度，留出头部和页脚空间 */
+    min-height: 500px; /* 最小高度保证显示 */
+    max-height: 700px; /* 最大高度限制 */
+  }
+  
+  /* 左侧文件栏样式 */
+  #sidebar {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    overflow: hidden; /* 防止溢出 */
+  }
+  
+  .file-list-container {
+    flex: 1;
+    overflow-y: auto; /* 垂直滚动 */
+    overflow-x: hidden; /* 隐藏水平滚动 */
+    padding: 15px;
+    max-height: calc(100% - 40px); /* 减去标题高度 */
+  }
+  
+  .file-item { 
+    display: flex; 
+    align-items: center; 
+    gap: 8px; 
+    margin-bottom: 8px; 
+    padding: 8px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+    transition: all 0.2s ease;
+  }
+  
+  .file-item:hover {
+    background: #f1f3f4;
+    transform: translateX(2px);
+  }
+  
+  .thumb { 
+    width: 56px; 
+    height: 40px; 
+    object-fit: contain; 
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    flex-shrink: 0; /* 防止缩略图被压缩 */
+  }
+  
+  /* 右侧图像区域 */
+  .plot-section {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .plot-image-container { 
+    display: flex; 
+    gap: 20px; 
+    height: calc(100% - 40px); /* 减去标题高度 */
+    flex: 1;
+  }
+  
+  .plot-main-image {
+    flex: 2;
+    min-width: 0; /* 允许flex item缩小 */
+  }
+  
+  #plot { 
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border: 1px solid #ccc; 
+    padding: 10px;
+    background: white;
+    border-radius: 8px;
+  }
+  
+  /* 参数总结表侧边栏 */
+  .summary-sidebar {
+    width: 33.33%;
+    min-width: 250px; /* 最小宽度 */
+    display: none; /* 默认隐藏 */
+  }
+  
+  .summary-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 15px;
+  }
+  
+  .summary-title {
+    margin-bottom: 10px;
+    font-weight: bold;
+    color: #495057;
+    font-size: 1rem;
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 8px;
+  }
+  
+  .summary-table-container {
+    flex: 1;
+    min-height: 0; /* 允许flex item缩小 */
+    overflow: hidden; /* 防止溢出 */
+  }
+  
+  #summaryTable { 
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    border: 1px solid #e9ecef; 
+    border-radius: 4px;
+  }
+  
+  .summary-explanation {
+    margin-top: 15px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+    font-size: 0.85rem;
+  }
+  
+  .summary-explanation p {
+    margin-bottom: 5px;
+  }
+  
+  /* 空状态样式 */
+  .empty-message {
+    text-align: center;
+    color: #6c757d;
+    padding: 40px 15px;
+    font-style: italic;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border: 1px dashed #dee2e6;
+  }
+  
+  /* 响应式调整 */
+  @media (max-width: 992px) {
+    .main-content {
+      flex-direction: column;
+      height: auto;
+      min-height: auto;
+      max-height: none;
+    }
+    
+    .col-3, .col {
+      width: 100% !important;
+      height: 400px; /* 移动端固定高度 */
+      margin-bottom: 20px;
+    }
+    
+    .plot-image-container {
+      flex-direction: column;
+      height: auto;
+    }
+    
+    .plot-main-image, .summary-sidebar {
+      width: 100%;
+      height: 400px; /* 移动端固定高度 */
+    }
+    
+    .summary-sidebar {
+      min-width: auto;
+    }
+  }
+  
+  /* 滚动条美化 */
+  .file-list-container::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .file-list-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+  }
+  
+  .file-list-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+  }
+  
+  .file-list-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+  }
+</style>

@@ -1,0 +1,14 @@
+templates/
+├── base.html           # 基础模板
+├── index.html         # 主页面（继承base.html）
+├── components/        # 组件目录
+│   ├── header.html    # 标题区域
+│   ├── controls.html  # 控制区域（用户/数据集选择）
+│   ├── upload.html    # 上传区域
+│   ├── main_content.html  # 主要内容区域
+│   └── messages.html  # 消息提示组件
+
+
+static
+└── js/                # JavaScript文件目录
+    └── main.js        # 主JavaScript文件

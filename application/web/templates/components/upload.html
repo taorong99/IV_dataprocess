@@ -1,0 +1,317 @@
+<!-- 上传文件区域 -->
+<div class="row mb-4">
+  <div class="col-md-8">
+    <div class="upload-controls-row">
+      <!-- 拖拽上传区域 -->
+      <div class="drag-drop-container">
+        <div class="upload-section-title">上传文件</div>
+        <div id="dragDropArea" class="drag-drop-area" title="拖拽文件到这里，或点击选择文件">
+          <div class="drag-icon">📁</div>
+          <div class="drag-text">拖拽文件到这里</div>
+          <div class="drag-hint">支持 .txt, .csv 文件</div>
+          <div class="drag-hint">或点击选择文件</div>
+        </div>
+        
+        <!-- 已选择的文件列表 -->
+        <div id="selectedFilesList" class="selected-files-list" style="display: none;">
+          <div id="selectedFilesContent"></div>
+        </div>
+      </div>
+      
+      <!-- 文件统计与执行拟合按钮行 -->
+      <div class="upload-action-container mt-3">
+        <div class="row align-items-center g-2">
+          <!-- 文件统计信息 -->
+          <div class="col-md-4">
+            <div class="upload-info">
+              <div id="fileCountInfo" class="file-count">
+                共上传 <span id="uploadedFileCount">0</span> 个文件，
+                已拟合 <span id="processedFileCount">0</span> 个文件
+              </div>
+            </div>
+          </div>
+          <!-- 执行拟合按钮 -->
+          <div class="col-md-4 text-center">
+            <button id="btnProcess" class="btn btn-process" type="button" title="执行拟合处理" disabled>
+              执行拟合
+            </button>
+          </div>
+          <!-- 下载所有图片按钮 -->
+          <div class="col-md-4 text-end">
+            <button id="btnDownloadAll" class="btn btn-download" type="button" title="下载当前数据集的所有图片" disabled>
+              下载所有图片
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 上传进度模态框 -->
+      <div class="modal fade" id="uploadProgressModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">上传进度</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭" onclick="cancelUpload()"></button>
+            </div>
+            <div class="modal-body">
+              <!-- 总体进度 -->
+              <div class="mb-3">
+                <div class="d-flex justify-content-between mb-1">
+                  <span>总体进度</span>
+                  <span id="overallProgressText">0%</span>
+                </div>
+                <div class="progress" style="height: 20px;">
+                  <div id="overallProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                       role="progressbar" style="width: 0%"></div>
+                </div>
+              </div>
+              
+              <!-- 当前文件进度 -->
+              <div id="currentFileSection" style="display: none;">
+                <div class="d-flex justify-content-between mb-1">
+                  <span>当前文件：<span id="currentFileName" class="text-truncate"></span></span>
+                  <span id="currentFileProgressText">0%</span>
+                </div>
+                <div class="progress" style="height: 15px;">
+                  <div id="currentFileProgressBar" class="progress-bar bg-info" 
+                       role="progressbar" style="width: 0%"></div>
+                </div>
+              </div>
+              
+              <!-- 上传统计 -->
+              <div class="mt-3">
+                <div class="row text-center">
+                  <div class="col-6">
+                    <div class="small text-muted">已上传</div>
+                    <div class="h5" id="uploadedCount">0</div>
+                  </div>
+                  <div class="col-6">
+                    <div class="small text-muted">总文件</div>
+                    <div class="h5" id="totalFilesCount">0</div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 上传速度和时间估计 -->
+              <div class="mt-3" id="speedInfo" style="display: none;">
+                <div class="small text-muted">
+                  速度: <span id="uploadSpeed">0 KB/s</span> | 
+                  剩余时间: <span id="timeRemaining">计算中...</span>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" onclick="cancelUpload()">取消上传</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 新增：后端信息提示栏 -->
+      <div id="backendMessageContainer" class="backend-message-container mt-3" style="display: none;">
+        <div class="backend-message alert" role="alert">
+          <div class="d-flex align-items-center">
+            <div class="me-2">ℹ️</div>
+            <div id="backendMessageText" class="flex-grow-1"></div>
+            <button type="button" class="btn-close" onclick="hideBackendMessage()"></button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 处理结果消息 -->
+      <div class="process-result-container mt-3">
+        <div id="processResult"></div>
+      </div>
+      
+      <!-- 隐藏的文件输入，用于点击拖拽区域时触发 -->
+      <input type="file" name="datafiles" id="datafiles" multiple class="d-none" accept=".txt,.csv">
+    </div>
+  </div>
+</div>
+
+<style>
+  .drag-drop-area {
+    border: 2px dashed #6c757d;
+    border-radius: 8px;
+    padding: 30px 20px;
+    text-align: center;
+    background-color: #f8f9fa;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .drag-drop-area:hover {
+    border-color: #4361ee;
+    background-color: #e9ecef;
+  }
+  
+  .drag-drop-area.drag-over {
+    border-color: #4361ee;
+    background-color: #e7f3ff;
+  }
+  
+  .drag-icon {
+    font-size: 3rem;
+    color: #6c757d;
+    margin-bottom: 15px;
+  }
+  
+  .drag-text {
+    font-size: 1rem;
+    color: #495057;
+    margin-bottom: 5px;
+  }
+  
+  .drag-hint {
+    font-size: 0.85rem;
+    color: #6c757d;
+  }
+  
+  .selected-files-list {
+    max-height: 150px;
+    overflow-y: auto;
+    margin-top: 10px;
+    padding: 10px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+  }
+  
+  .selected-file-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 8px;
+    margin-bottom: 5px;
+    background: #f8f9fa;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+  
+  .selected-file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .remove-file-btn {
+    background: none;
+    border: none;
+    color: #dc3545;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0 5px;
+  }
+  
+  .upload-info {
+    padding: 8px 12px;
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #dee2e6;
+  }
+  
+  .file-count {
+    font-size: 0.9rem;
+    color: #495057;
+  }
+  
+  /* 执行拟合按钮样式 */
+  .btn-process {
+    padding: 8px 24px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    min-width: 120px;
+  }
+  
+  .btn-process:not(:disabled) {
+    background-color: #198754; /* Bootstrap success green */
+    border-color: #198754;
+    color: white;
+  }
+  
+  .btn-process:not(:disabled):hover {
+    background-color: #157347;
+    border-color: #146c43;
+    transform: translateY(-1px);
+  }
+  
+  .btn-process:disabled {
+    background-color: #6c757d; /* Bootstrap secondary gray */
+    border-color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+  
+  /* 下载按钮样式 */
+  .btn-download {
+    padding: 8px 24px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    min-width: 140px;
+    background-color: #0d6efd; /* Bootstrap primary blue */
+    border-color: #0d6efd;
+    color: white;
+  }
+  
+  .btn-download:hover:not(:disabled) {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+    transform: translateY(-1px);
+  }
+  
+  .btn-download:disabled {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+  
+  /* 后端信息提示栏样式 */
+  .backend-message-container {
+    animation: fadeIn 0.3s ease;
+  }
+  
+  .backend-message {
+    padding: 12px 16px;
+    border-radius: 8px;
+    border-left: 4px solid #0dcaf0; /* Bootstrap info color */
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+    color: #0c5460;
+  }
+  
+  .backend-message .btn-close {
+    padding: 0.75rem;
+  }
+  
+  /* 进度条动画 */
+  .progress-bar-animated {
+    animation: progress-bar-stripes 1s linear infinite;
+  }
+  
+  @keyframes progress-bar-stripes {
+    from { background-position: 1rem 0; }
+    to { background-position: 0 0; }
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  /* 文本截断 */
+  .text-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 150px;
+    display: inline-block;
+    vertical-align: bottom;
+  }
+</style>
