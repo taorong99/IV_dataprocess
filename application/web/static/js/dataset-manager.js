@@ -4,7 +4,6 @@
  */
 
 // 全局状态
-const DEFAULT_USER = '默认用户';
 let currentSelectedDataset = '';
 let datasetSummaryTables = {};
 let currentInputFileCount = 0;
@@ -78,8 +77,16 @@ async function initUsers() {
       userSel.appendChild(opt);
     });
     
-    const defaultInList = users.includes(DEFAULT_USER);
-    userSel.value = defaultInList ? DEFAULT_USER : (users[0] || '');
+    // 使用storageManager获取要加载的用户
+    let userToLoad;
+    if (window.storageManager && window.storageManager.getValidUserToLoad) {
+      userToLoad = window.storageManager.getValidUserToLoad(users);
+    } else {
+      // 降级：使用默认用户
+      userToLoad = users.includes('默认用户') ? '默认用户' : (users[0] || '');
+    }
+    
+    userSel.value = userToLoad;
     
     if (!userSel.value) {
       showProcessResult('没有可用用户，请先创建用户', false);
@@ -448,9 +455,15 @@ async function handleProcessDataset() {
       const errorMsg = result.errors > 0 ? `，${result.errors} 个文件处理失败` : '';
       showProcessResult(successMsg + errorMsg, true);
       
+      // 执行拟合成功后存储当前用户
+      if (window.storageManager && window.storageManager.saveCurrentUser) {
+        window.storageManager.saveCurrentUser(username);
+      }
+      
       // 处理成功后重新加载数据集
       await loadDatasetsForUser(username, true);
       showProcessResult('拟合处理完成！', true);
+      
     } else {
       showProcessResult('处理失败：没有找到可处理的文件', false);
     }
