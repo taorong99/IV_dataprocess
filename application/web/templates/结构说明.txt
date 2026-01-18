@@ -19,3 +19,4 @@ static/
     └── dataset-manager.js   # 用户/数据集管理逻辑
     └── ui-handlers.js       # UI交互和事件处理
     └── image-viewer.js      # 图片预览和模态框功能
+    └── local-storage-manager.js # localStorage管理
