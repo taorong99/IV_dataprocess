@@ -45,69 +45,7 @@
         </div>
       </div>
       
-      <!-- 上传进度模态框 -->
-      <div class="modal fade" id="uploadProgressModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content">
-            <div class="modal-header">
-              <h5 class="modal-title">上传进度</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭" onclick="cancelUpload()"></button>
-            </div>
-            <div class="modal-body">
-              <!-- 总体进度 -->
-              <div class="mb-3">
-                <div class="d-flex justify-content-between mb-1">
-                  <span>总体进度</span>
-                  <span id="overallProgressText">0%</span>
-                </div>
-                <div class="progress" style="height: 20px;">
-                  <div id="overallProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
-                       role="progressbar" style="width: 0%"></div>
-                </div>
-              </div>
-              
-              <!-- 当前文件进度 -->
-              <div id="currentFileSection" style="display: none;">
-                <div class="d-flex justify-content-between mb-1">
-                  <span>当前文件：<span id="currentFileName" class="text-truncate"></span></span>
-                  <span id="currentFileProgressText">0%</span>
-                </div>
-                <div class="progress" style="height: 15px;">
-                  <div id="currentFileProgressBar" class="progress-bar bg-info" 
-                       role="progressbar" style="width: 0%"></div>
-                </div>
-              </div>
-              
-              <!-- 上传统计 -->
-              <div class="mt-3">
-                <div class="row text-center">
-                  <div class="col-6">
-                    <div class="small text-muted">已上传</div>
-                    <div class="h5" id="uploadedCount">0</div>
-                  </div>
-                  <div class="col-6">
-                    <div class="small text-muted">总文件</div>
-                    <div class="h5" id="totalFilesCount">0</div>
-                  </div>
-                </div>
-              </div>
-              
-              <!-- 上传速度和时间估计 -->
-              <div class="mt-3" id="speedInfo" style="display: none;">
-                <div class="small text-muted">
-                  速度: <span id="uploadSpeed">0 KB/s</span> | 
-                  剩余时间: <span id="timeRemaining">计算中...</span>
-                </div>
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" onclick="cancelUpload()">取消上传</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 新增：后端信息提示栏 -->
+      <!-- 后端信息提示栏 -->
       <div id="backendMessageContainer" class="backend-message-container mt-3" style="display: none;">
         <div class="backend-message alert" role="alert">
           <div class="d-flex align-items-center">

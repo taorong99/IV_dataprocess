@@ -15,3 +15,4 @@ config_input_tab.json
 /application/web/static/inputs
 /application/web/static/results
 /application/web/logs
+/application/web/backup

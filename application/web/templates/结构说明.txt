@@ -9,6 +9,13 @@ templates/
 │   └── messages.html  # 消息提示组件
 
 
-static
+static/
 └── js/                # JavaScript文件目录
-    └── main.js        # 主JavaScript文件
+    └── main.js              # 入口文件，初始化模块和事件绑定
+    └── utils.js             # 通用工具函数（消息显示、格式化、防缓存等）
+    └── api.js               # 所有后端API调用封装
+    └── upload.js            # 文件上传和进度管理
+    └── download.js          # 下载功能（打包下载所有图片）
+    └── dataset-manager.js   # 用户/数据集管理逻辑
+    └── ui-handlers.js       # UI交互和事件处理
+    └── image-viewer.js      # 图片预览和模态框功能

@@ -166,6 +166,43 @@
       color: #6c757d !important;
     }
     
+    /* 模态框修复样式 */
+    .modal {
+      backdrop-filter: blur(2px);
+    }
+    
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      z-index: 1040;
+      width: 100vw;
+      height: 100vh;
+      background-color: #000;
+      opacity: 0.5;
+    }
+    
+    .modal-backdrop.fade {
+      opacity: 0;
+    }
+    
+    .modal-backdrop.show {
+      opacity: 0.5;
+    }
+    
+    /* 确保模态框在最上层 */
+    .modal.show {
+      display: block;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+    
+    /* 修复body滚动 */
+    body.modal-open {
+      overflow: hidden;
+      padding-right: 0 !important;
+    }
+    
     /* 响应式调整 */
     @media (max-width: 768px) {
       .footer {
@@ -212,7 +249,166 @@
     </div>
   </div>
 
-  {% block scripts %}{% endblock %}
+  <!-- 上传进度模态框 -->
+  <div class="modal fade" id="uploadProgressModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">上传进度</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="关闭" onclick="cancelUpload()"></button>
+        </div>
+        <div class="modal-body">
+          <!-- 总体进度 -->
+          <div class="mb-3">
+            <div class="d-flex justify-content-between mb-1">
+              <span>总体进度</span>
+              <span id="overallProgressText">0%</span>
+            </div>
+            <div class="progress" style="height: 20px;">
+              <div id="overallProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" 
+                   role="progressbar" style="width: 0%"></div>
+            </div>
+          </div>
+          
+          <!-- 当前文件进度 -->
+          <div id="currentFileSection" style="display: none;">
+            <div class="d-flex justify-content-between mb-1">
+              <span>当前文件：<span id="currentFileName" class="text-truncate"></span></span>
+              <span id="currentFileProgressText">0%</span>
+            </div>
+            <div class="progress" style="height: 15px;">
+              <div id="currentFileProgressBar" class="progress-bar bg-info" 
+                   role="progressbar" style="width: 0%"></div>
+            </div>
+          </div>
+          
+          <!-- 上传统计 -->
+          <div class="mt-3">
+            <div class="row text-center">
+              <div class="col-6">
+                <div class="small text-muted">已上传</div>
+                <div class="h5" id="uploadedCount">0</div>
+              </div>
+              <div class="col-6">
+                <div class="small text-muted">总文件</div>
+                <div class="h5" id="totalFilesCount">0</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 上传速度和时间估计 -->
+          <div class="mt-3" id="speedInfo" style="display: none;">
+            <div class="small text-muted">
+              速度: <span id="uploadSpeed">0 KB/s</span> | 
+              剩余时间: <span id="timeRemaining">计算中...</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="cancelUpload()">取消上传</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% block scripts %}
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- JSZip库用于打包下载 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <!-- 全局函数定义（供图片预览使用） -->
+    <script>
+      // 这些函数将在对应的模块中定义，这里提供兼容性保证
+      if (typeof window.showImageInModal === 'undefined') {
+        window.showImageInModal = function(imageUrl, imageTitle) {
+          console.warn('showImageInModal: image-viewer模块未正确加载');
+          // 简单回退实现
+          const modalImage = document.getElementById('modalImage');
+          const modalTitle = document.getElementById('modalTitle');
+          if (modalImage && modalTitle) {
+            modalImage.src = imageUrl;
+            modalTitle.textContent = imageTitle;
+            const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+            modal.show();
+          }
+        };
+      }
+      
+      if (typeof window.downloadModalImage === 'undefined') {
+        window.downloadModalImage = function() {
+          console.warn('downloadModalImage: image-viewer模块未正确加载');
+          const modalImage = document.getElementById('modalImage');
+          if (modalImage && modalImage.src) {
+            const imageUrl = modalImage.src.split('?')[0];
+            const fileName = imageUrl.split('/').pop().split('?')[0] || 'image.png';
+            const link = document.createElement('a');
+            link.href = imageUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }
+        };
+      }
+      
+      if (typeof window.hideBackendMessage === 'undefined') {
+        window.hideBackendMessage = function() {
+          const container = document.getElementById('backendMessageContainer');
+          if (container) container.style.display = 'none';
+        };
+      }
+      
+      if (typeof window.cancelUpload === 'undefined') {
+        window.cancelUpload = function() {
+          console.warn('cancelUpload: upload模块未正确加载');
+        };
+      }
+      
+      // 模态框修复函数
+      function fixModalBackdrop() {
+        // 确保遮罩层被移除
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        backdrops.forEach(function(backdrop) {
+          if (backdrop.parentNode) {
+            backdrop.parentNode.removeChild(backdrop);
+          }
+        });
+        
+        // 确保body样式恢复
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+      }
+      
+      // 监听所有模态框的隐藏事件
+      document.addEventListener('DOMContentLoaded', function() {
+        const modalElements = document.querySelectorAll('.modal');
+        modalElements.forEach(function(modal) {
+          modal.addEventListener('hidden.bs.modal', function(event) {
+            setTimeout(fixModalBackdrop, 100);
+          });
+          
+          // 点击关闭按钮时也修复
+          const closeBtn = modal.querySelector('.btn-close[data-bs-dismiss="modal"]');
+          if (closeBtn) {
+            closeBtn.addEventListener('click', function() {
+              setTimeout(fixModalBackdrop, 100);
+            });
+          }
+        });
+      });
+    </script>
+    
+    <!-- 应用JavaScript文件（按依赖顺序加载） -->
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/dataset-manager.js"></script>
+    <script src="/static/js/upload.js"></script>
+    <script src="/static/js/download.js"></script>
+    <script src="/static/js/image-viewer.js"></script>
+    <script src="/static/js/main.js"></script>
+  {% endblock %}
   
   <!-- 备案信息页脚 -->
   <footer class="footer">
@@ -240,101 +436,5 @@
       </div>
     </div>
   </footer>
-  
-  <!-- Bootstrap JS -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-  <!-- JSZip库用于打包下载 -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  
-  <script>
-    // 图片放大功能
-    function showImageInModal(imageUrl, imageTitle = '图片预览') {
-      const modalImage = document.getElementById('modalImage');
-      const modalTitle = document.getElementById('modalTitle');
-      
-      // 设置图片和标题
-      modalImage.src = imageUrl;
-      modalTitle.textContent = imageTitle;
-      
-      // 显示模态框
-      const modal = new bootstrap.Modal(document.getElementById('imageModal'));
-      modal.show();
-    }
-    
-    // 下载模态框中的图片
-    function downloadModalImage() {
-      const modalImage = document.getElementById('modalImage');
-      const imageUrl = modalImage.src.split('?')[0]; // 去掉查询参数
-      const fileName = imageUrl.split('/').pop().split('?')[0] || 'image.png';
-      
-      const link = document.createElement('a');
-      link.href = imageUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-    
-    // 页面加载完成后为图片添加点击事件
-    document.addEventListener('DOMContentLoaded', function() {
-      // 稍后设置图片点击事件，等待图片加载
-      setTimeout(setupImageClickEvents, 1000);
-    });
-    
-    // 设置图片点击事件
-    function setupImageClickEvents() {
-      // 主图点击放大
-      const plotImg = document.getElementById('plot');
-      if (plotImg) {
-        plotImg.style.cursor = 'zoom-in';
-        plotImg.addEventListener('click', function() {
-          if (plotImg.src && plotImg.src !== '') {
-            const fileName = plotImg.src.split('/').pop().split('?')[0];
-            showImageInModal(plotImg.src, fileName);
-          }
-        });
-      }
-      
-      // 参数总结表点击放大
-      const summaryImg = document.getElementById('summaryTable');
-      if (summaryImg) {
-        summaryImg.style.cursor = 'zoom-in';
-        summaryImg.addEventListener('click', function() {
-          if (summaryImg.src && summaryImg.src !== '') {
-            const fileName = summaryImg.src.split('/').pop().split('?')[0];
-            showImageInModal(summaryImg.src, fileName);
-          }
-        });
-      }
-      
-      // 缩略图点击放大
-      document.addEventListener('click', function(e) {
-        if (e.target.classList.contains('thumb')) {
-          e.preventDefault();
-          e.stopPropagation();
-          
-          // 获取对应的原图URL（去掉缩略图的查询参数，使用原始图片）
-          const thumbSrc = e.target.src;
-          const originalSrc = thumbSrc.split('?')[0]; // 去掉防缓存参数
-          const fileName = e.target.alt || 'image.png';
-          
-          showImageInModal(originalSrc, fileName);
-        }
-      });
-    }
-    
-    // 动态添加的图片也需要设置点击事件
-    function setupDynamicImageClick(imgElement) {
-      if (imgElement && (imgElement.id === 'plot' || imgElement.id === 'summaryTable')) {
-        imgElement.style.cursor = 'zoom-in';
-        imgElement.addEventListener('click', function() {
-          if (imgElement.src && imgElement.src !== '') {
-            const fileName = imgElement.src.split('/').pop().split('?')[0];
-            showImageInModal(imgElement.src, fileName);
-          }
-        });
-      }
-    }
-  </script>
 </body>
 </html>
