@@ -8,6 +8,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pandas as pd
 from flask import Flask, request, jsonify, render_template, send_file
+from werkzeug.utils import secure_filename
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -167,6 +168,21 @@ def process_data(input_folder, output_folder, filename):
         logger.error(f"处理文件 {filename} 失败: {e}")
         raise
 
+def _fallback_process_one_by_one(input_folder, output_folder):
+    """Auxiliary function: Process files one by one using the legacy process_data"""
+    results = {}
+    input_files = [f for f in os.listdir(input_folder) 
+                  if f.lower().endswith(('.txt', '.csv')) and os.path.isfile(os.path.join(input_folder, f))]
+    
+    for filename in input_files:
+        try:
+            img_filename = process_data(input_folder, output_folder, filename)
+            results[filename] = [img_filename]
+        except Exception as e:
+            logger.error(f"处理文件 {filename} 失败: {e}")
+            results[filename] = []
+    return results
+
 def process_iv_data(input_folder, output_folder):
     """
     使用新的iv_fit函数批量处理IV数据
@@ -179,19 +195,7 @@ def process_iv_data(input_folder, output_folder):
     try:
         if not IV_FIT_AVAILABLE:
             logger.warning("iv_fit模块不可用，使用原有的process_data函数逐个处理")
-            results = {}
-            # 获取输入文件夹中的所有.txt和.csv文件
-            input_files = [f for f in os.listdir(input_folder) 
-                          if f.lower().endswith(('.txt', '.csv')) and os.path.isfile(os.path.join(input_folder, f))]
-            
-            for filename in input_files:
-                try:
-                    img_filename = process_data(input_folder, output_folder, filename)
-                    results[filename] = [img_filename]
-                except Exception as e:
-                    logger.error(f"处理文件 {filename} 失败: {e}")
-                    results[filename] = []
-            return results
+            return _fallback_process_one_by_one(input_folder, output_folder)
         
         # 记录处理前input_folder中的文件
         original_files = set(os.listdir(input_folder))
@@ -231,18 +235,7 @@ def process_iv_data(input_folder, output_folder):
         # 如果没有生成图片，尝试使用原有的process_data函数逐个处理
         if not generated_images:
             logger.warning(f"iv_fit未生成图片，尝试使用process_data逐个处理")
-            results = {}
-            input_files = [f for f in os.listdir(input_folder) 
-                          if f.lower().endswith(('.txt', '.csv')) and os.path.isfile(os.path.join(input_folder, f))]
-            
-            for filename in input_files:
-                try:
-                    img_filename = process_data(input_folder, output_folder, filename)
-                    results[filename] = [img_filename]
-                except Exception as e:
-                    logger.error(f"处理文件 {filename} 失败: {e}")
-                    results[filename] = []
-            return results
+            return _fallback_process_one_by_one(input_folder, output_folder)
         
         # 将生成的图片映射回原始文件
         # 根据文件名前缀匹配：例如 "3-4_fit.png" 对应原始文件 "3-4.txt" 或 "3-4.csv"
@@ -281,22 +274,7 @@ def process_iv_data(input_folder, output_folder):
         error_msg = f"批量处理IV数据失败: {e}"
         logger.error(error_msg)
         # 如果批量处理失败，回退到原有的process_data函数逐个处理
-        try:
-            results = {}
-            input_files = [f for f in os.listdir(input_folder) 
-                          if f.lower().endswith(('.txt', '.csv')) and os.path.isfile(os.path.join(input_folder, f))]
-            
-            for filename in input_files:
-                try:
-                    img_filename = process_data(input_folder, output_folder, filename)
-                    results[filename] = [img_filename]
-                except Exception as e2:
-                    logger.error(f"回退处理文件 {filename} 失败: {e2}")
-                    results[filename] = []
-            return results
-        except Exception as e2:
-            logger.error(f"回退处理也失败: {e2}")
-            raise ValueError(f"处理文件夹 {input_folder} 失败: {e}")
+        return _fallback_process_one_by_one(input_folder, output_folder)
 
 @app.route('/')
 def index():
@@ -489,36 +467,29 @@ def upload_files():
     
     logger.info(f"共收到 {len(files)} 个文件")
     
-    # 计算总文件大小用于进度跟踪
-    total_size = 0
-    for f in files:
-        # 注意：在Flask中，request.files的文件对象没有size属性
-        # 我们需要通过其他方式获取文件大小，或者使用内容长度头
-        pass
-    
     for i, f in enumerate(files):
         try:
-            # 获取文件大小（如果可能）
-            f.stream.seek(0, 2)  # 移动到文件末尾
-            file_size = f.stream.tell()  # 获取文件大小
-            f.stream.seek(0)  # 重置到文件开头
+            # 清理是否有不安全的文件名
+            if not f.filename:
+                continue
+            safe_name = secure_filename(f.filename)
             
             # 保存原始文件到inputs文件夹
-            input_path = os.path.join(batch_input_folder, f.filename)
+            input_path = os.path.join(batch_input_folder, safe_name)
             f.save(input_path)
             
-            logger.info(f"文件上传成功: {f.filename} -> {input_path}")
+            logger.info(f"文件上传成功: {safe_name} -> {input_path}")
             results.append({
                 "success": True, 
-                "filename": f.filename,
-                "message": f"{f.filename} 上传成功"
+                "filename": safe_name,
+                "message": f"{safe_name} 上传成功"
             })
         except Exception as e:
             error_msg = f"文件上传失败 {f.filename}: {e}"
             logger.error(error_msg)
             results.append({
                 "success": False, 
-                "filename": f.filename,
+                "filename": f.filename if f else "unknown",
                 "error": str(e)
             })
     
@@ -827,20 +798,27 @@ def serve_result_image(username, dataset, filename):
     try:
         # 解码路径参数
         decoded_username = urllib.parse.unquote(username)
-        
-        # 数据集路径解码 - 单层解码就够了
         decoded_dataset = urllib.parse.unquote(dataset)
-        
-        # 文件名解码
         decoded_filename = urllib.parse.unquote(filename)
         
+        # 安全性检查：防止目录遍历
+        if '..' in decoded_username or '..' in decoded_dataset or '..' in decoded_filename:
+             logger.warning(f"检测到非法路径请求: {username}/{dataset}/{filename}")
+             return jsonify({"error": "Invalid path"}), 400
+
         logger.info(f"图片请求 - 用户: {decoded_username}, 数据集: {decoded_dataset}, 文件名: {decoded_filename}")
         
-        # 构建文件路径
-        file_path = os.path.join(RESULTS_FOLDER, decoded_username, decoded_dataset, decoded_filename)
+        # 构建并规范化文件路径
+        base_results_dir = os.path.abspath(RESULTS_FOLDER)
+        file_path = os.path.abspath(os.path.join(RESULTS_FOLDER, decoded_username, decoded_dataset, decoded_filename))
         
+        # 确保文件路径在RESULTS_FOLDER内
+        if not file_path.startswith(base_results_dir):
+            logger.warning(f"访问权限拒绝: {file_path}")
+            return jsonify({"error": "Access denied"}), 403
+
         if os.path.exists(file_path):
-            logger.info(f"返回图片: {file_path}")
+            # logger.info(f"返回图片: {file_path}") # 减少日志噪音
             # 设置缓存控制头
             response = send_file(file_path)
             response.headers['Cache-Control'] = 'public, max-age=3600'
