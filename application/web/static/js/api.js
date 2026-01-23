@@ -142,19 +142,3 @@ async function deleteFile(username, dataset, filename) {
     body: fd 
   });
 }
-
-async function checkFileExists(username, dataset, filename) {
-  const encodedDataset = encodeURIComponent(dataset);
-  const encodedUsername = encodeURIComponent(username);
-  const encodedFilename = encodeURIComponent(filename);
-  
-  try {
-    const response = await fetchJSON(
-      `/check-file?username=${encodedUsername}&dataset=${encodedDataset}&filename=${encodedFilename}`
-    );
-    return response.exists || false;
-  } catch (err) {
-    console.error('检查文件是否存在失败:', err);
-    return false;
-  }
-}
