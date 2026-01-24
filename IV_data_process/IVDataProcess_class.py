@@ -676,7 +676,7 @@ class IVDataProcess:
         # maxarg = np.argwhere(V_diff[minarg:] < self.V_g/3)[0][0] + minarg
         # 连续3个点小于V_g/3才有效, 是否要考虑绝对值防止负阻?
         for n in range(minarg, len(V_diff)-3):
-            if V_diff[n] < self.V_g/3 and V_diff[n+1] < self.V_g/3 and V_diff[n+2] < self.V_g/3:
+            if V_diff[n] < self.V_g/3 and V_diff[n+1] < self.V_g/3 and V_diff[n+2] < self.V_g/3 and abs(V[n]-self.get_Vg()) < self.get_Vg()/4:
                 maxarg = n
                 break
             maxarg = len(V_diff) - 1 # 如果没有找到, 则取到最后一个点
