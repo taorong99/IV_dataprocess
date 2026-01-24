@@ -848,7 +848,7 @@ class IVDataProcess:
         plt.legend()
         plt.grid()
         if save_fig:
-            figname = self.filename.split('.')[0] + '_fit.png'
+            figname = os.path.splitext(self.filename)[0] + '_fit.png'
             plt.savefig(self.file_path.replace(self.filename, figname))
         plt.show()
         #\----------------\画图\----------------\#
@@ -885,7 +885,7 @@ class IVDataProcess:
         plt.grid(axis='y', linestyle='--', alpha=0.7)
 
         if save_fig:
-            figname = self.filename.split('.')[0] + '_Ic_spread.png'
+            figname = os.path.splitext(self.filename)[0] + '_Ic_spread.png'
             plt.savefig(self.file_path.replace(self.filename, figname))
 
         plt.show()
