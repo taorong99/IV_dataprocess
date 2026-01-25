@@ -351,9 +351,18 @@ class IVDataProcess:
             V_sort = self.V_data[np.argsort(self.I_data)]
             V_diff = np.diff(V_sort)
             V_hyster = np.max(abs(V_diff)) # 回滞电压
-            if V_hyster > 1.5*self.V_g:
+
+            # 获取回滞电压附近的5个点, 进行线性拟合, 得到回滞电阻
+            index_hyster = np.argmax(abs(V_diff))
+            V_data_hyster = V_sort[index_hyster+1]
+            indices_hyster = np.argsort(abs(self.V_data-V_data_hyster))[:5]
+            V_hyster_fit = self.V_data[indices_hyster]
+            I_hyster_fit = self.I_data[indices_hyster]
+            R_hyster = linregress(I_hyster_fit, V_hyster_fit).slope
+
+            if V_hyster > 1.5*self.V_g and (abs(R_hyster)<0.3 or abs(R_hyster)/slope_max20 < 0.2):
                 curve_type = 'JJa'
-            elif V_hyster > 0.8*self.V_g:
+            elif V_hyster > 0.8*self.V_g and V_hyster < 1.2*self.V_g and (abs(R_hyster)<0.2 or abs(R_hyster)/slope_max20 < 0.3):
                 curve_type = 'JJu'
             else:
                 curve_type = 'JJo'
@@ -469,9 +478,9 @@ class IVDataProcess:
                     V = V[index_convo-1: -(index_convo-1)].copy()
 
                 if (n==0 or n==1) and Ic_ests[0] is not None:
-                    mask = (I>Ic_ests[0]*0.85) & (I<Ic_ests[0]*1.15)
+                    mask = (I>Ic_ests[0]*0.85/I_norm) & (I<Ic_ests[0]*1.15/I_norm)
                     if len(I[mask]) < 3: #不足3个点则补齐
-                        mask = np.argsort(abs(I-Ic_ests[0]))[:3]
+                        mask = np.argsort(abs(I-Ic_ests[0]/I_norm))[:3]
                         mask = np.sort(mask)
                     V = V[mask]
                     I = I[mask]
