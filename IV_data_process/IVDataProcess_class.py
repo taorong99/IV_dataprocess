@@ -13,6 +13,7 @@ import pandas as pd
 from scipy.stats import linregress #线性回归用于拟合R
 from scipy.stats import zscore #计算V_offset时去除离群点用
 from scipy.optimize import minimize
+from scipy.signal import find_peaks
 import os
 
 #plt 显示中文
@@ -365,10 +366,91 @@ class IVDataProcess:
             elif V_hyster > 0.8*self.V_g and V_hyster < 1.2*self.V_g and (abs(R_hyster)<0.2 or abs(R_hyster)/slope_max20 < 0.3):
                 curve_type = 'JJu'
             else:
-                curve_type = 'JJo'
+                # 进一步区分 JJo 和 JJs
+                curve_type = self.classify_JJo_JJs()
 
         self.curve_type = curve_type
         return curve_type
+    
+    def classify_JJo_JJs(self) -> str:
+        """
+        通过dV/dI的峰值分布区分JJo和JJs. 只取正向I增长扫描或者负向I减少扫描的数据段进行分析.
+        Returns:
+            subtype(str): 'JJs' 或 'JJo'.
+        """
+        if not hasattr(self, 'segms'):
+                self.IVdata_split_4_segments(self.I_data, self.V_data)
+        IV_segments = self.segms
+
+        # 回滞大于1.2*Vg, 直接返回JJs
+        V_sort = self.V_data[np.argsort(self.I_data)]
+        V_hyster = np.max(abs(np.diff(V_sort)))
+        if V_hyster > 1.2*self.V_g:
+            return 'JJs'
+
+        segms_index = 0 if len(IV_segments[0]['I']) >= len(IV_segments[2]['I']) else 2 # 
+        I, V = IV_segments[segms_index]['I'], IV_segments[segms_index]['V'] # 用于分析的I和V数据.
+        if segms_index == 2:
+            I, V = -I, -V # 统一为正向扫描的数据段
+
+        if len(IV_segments[segms_index]['I']) < 5:
+            print('数据点太少, 无法区分, 直接返回JJo')
+            return 'JJo' 
+
+        index_eff = np.where(np.abs(np.diff(I)) > 1e-9)[0] # 有效点的索引, 去除电流不变的点
+        I = I[index_eff]
+        V = V[index_eff]
+        I_diff = np.diff(I)
+        delta_I = np.min(abs(I_diff)) # 电流步进值
+        V_diff = np.diff(V)
+        R_diff = V_diff/(I_diff)
+        R_diff_avg = np.mean(R_diff)
+        R_diff_std = np.std(R_diff)
+
+        # 首先获得两个差分电阻, 后面用于找差分电阻突变点的阈值
+        # 分别是电流递增段I=0和I=max处的差分电阻
+        # 用I=0或者max的4个点进行线性拟合
+        R0 =  abs(linregress(I[0:4], V[0:4]).slope) # 绝对值防止噪声导致的负斜率
+        Rm =  linregress(I[-4:], V[-4:]).slope
+
+        # 如果差分电阻最大的4个点的平均值在3倍标准差以内, 并且Rm和R0的差值较小, 则认为是JJo.
+        # 虽然有bug, 但是实验测试精度决定了数据分析精度
+        if (np.mean(np.sort(R_diff)[-4:]) < R_diff_avg + 3*R_diff_std) and (Rm/R0 < 3.0):
+            return 'JJo'
+        else: # 设定一个阈值进行寻找R_diff的峰, 然后再判断类型
+            threshold_height = R_diff_avg + 3 * R_diff_std
+            if R_diff_std > 0.6*abs(Rm-R0): # 标准差大意味着可能扫描步进大或者数据点少, 就要降低寻峰阈值
+                threshold_height = min(threshold_height, Rm + (Rm-R0))
+            peaks, properties = find_peaks(abs(R_diff), height=threshold_height, distance=max(5, len(R_diff)*0.01))
+
+            # temporary: plot to check JJs vs JJo
+            # plt.figure()
+            # plt.plot(abs(R_diff), label='abs(R_diff)', marker='o')
+            # plt.axhline(y=threshold_height, color='r', label='threshold', linestyle='-')
+            # plt.axhline(y=R0, color='c', linestyle=':', label='R0')
+            # plt.axhline(y=Rm, color='m', linestyle=':', label='Rm')
+            # plt.plot(peaks, abs(R_diff)[peaks], "x")
+            # plt.legend()
+            # plt.title(f'Peaks count: {len(peaks)}')
+            # plt.show()
+
+            # 如果峰的数量显著少于2个, 则认为是JJo
+            if len(peaks) < 2:
+                return 'JJo'
+            
+            # JJs峰的高度是依次增加的, JJo峰的高度没有规律可言
+            peak_heights = properties['peak_heights']
+            increasing_count = len([1 for i in range(1, len(peak_heights)) if peak_heights[i] > peak_heights[i-1]])
+            if len(peak_heights) < 6 and increasing_count >= len(peak_heights)-increasing_count:
+                # 峰数量不多时, 后半段的峰高度递增数量多于不递增数量, 算JJs的特征
+                # 峰数量很多就不适用了, 如果是噪声导致的JJo峰多, 很容易满足这个条件
+                return 'JJs'
+            elif np.mean(peak_heights[-len(peak_heights)//2:]) > 1.25 * np.mean(peak_heights[0:len(peak_heights)//2]): 
+                # 后半段峰高度均值显著大于前半段, 也算是JJs
+                return 'JJs'
+            else:
+                return 'JJo' 
+
 
     def get_Vg(self) -> float:
         """
@@ -494,8 +576,8 @@ class IVDataProcess:
                 
                 index_halfpi, phi_seg[n] = self.get_phi_halfpi(I, V)
 
-                # 对于JJo, 如果大于Ic的点, 存在连续两个点的V小于Ic点的V, 则在Ic,Imax之间再找一轮Ic
-                if self.curve_type == 'JJo':
+                # 对于JJo和JJs, 如果大于Ic的点, 存在连续两个点的V小于Ic点的V, 则在Ic,Imax之间再找一轮Ic
+                if self.curve_type == 'JJo' or self.curve_type == 'JJs':
                     for m in range(10):
                         I_above_Ic = I[index_halfpi+1:]
                         V_above_Ic = V[index_halfpi+1:]
@@ -516,11 +598,109 @@ class IVDataProcess:
             Ic_fitm = Ic_seg[2+np.argmin([abs(phi_seg[2]-np.pi/2), abs(phi_seg[3]-np.pi/2)])]
         self.Ic_fitp, self.Ic_fitm = Ic_fitp, Ic_fitm
         self.fit_result[0], self.fit_result[1] = Ic_fitp, Ic_fitm
+
+        # 对于JJs类型的IV曲线, 还要获取Ic_list
+        if self.curve_type == 'JJs':
+            self.get_Ic_list(Ic_fitp, Ic_fitm)
+
         return (Ic_fitp, Ic_fitm)
+
+    def get_Ic_list(self, Ic_fitp: float, Ic_fitm: float, Ic_interval=50e-6) -> list:
+        """
+        """
+        # 先将Ic_fitp和Ic_fitm作为Ic_list的第一个元素
+        Ic_listp = [Ic_fitp]
+        Ic_listm = [Ic_fitm]
+        # 用于寻找Ic_list的IV数据
+        I_p, V_p = self.segms[0]['I'], self.segms[0]['V']
+        I_m, V_m = self.segms[2]['I'], self.segms[2]['V']
+        index_eff_p = np.where(np.abs(np.diff(I_p)) > 1e-9)[0] # 有效点的索引, 去除电流不变的点
+        I_p, V_p = I_p[index_eff_p], V_p[index_eff_p]
+        index_eff_m = np.where(np.abs(np.diff(I_m)) > 1e-9)[0] # 有效点的索引, 去除电流不变的点
+        I_m, V_m = I_m[index_eff_m], V_m[index_eff_m]
+        I_p_norm, V_p_norm = abs(I_p).max(), abs(V_p).max() # 归一化系数
+        I_m_norm, V_m_norm = abs(I_m).max(), abs(V_m).max() # 归一化系数
+
+        # 找到差分电阻最大的两个点对应的电流值较大者, 作为Ic_list的极限值
+        R_p, R_m = np.diff(V_p)/ np.diff(I_p), np.diff(V_m)/ np.diff(I_m)
+        Ic_listp_limit = max(I_p[np.argsort(abs(R_p))[-2:]])
+        Ic_listm_limit = min(I_m[np.argsort(abs(R_m))[-2:]])
+
+        # Ic无效区间, 即不在此区间内寻找Ic_list
+        invalid_intervals_p = [[0, Ic_fitp+Ic_interval/2],[Ic_listp_limit+Ic_interval/2, max(I_p)]]
+        invalid_intervals_m = [[Ic_fitm-Ic_interval/2, 0],[min(I_m), Ic_listm_limit-Ic_interval/2]]
+
+        def find_max_continuous_interval(I: np.ndarray, valid_mask: list):
+            """
+            发现I有效数据中的最大连续区间, 返回该区间的范围以及起始和结束索引.
+            """
+            # 获取有效数据的索引
+            valid_indices = np.where(valid_mask)[0]
+            # 找到不连续点（索引差大于1的位置）
+            diff = np.diff(valid_indices)
+            break_points = np.where(diff > 1)[0]
+            # 将索引分割成连续区间
+            intervals = []
+            start_idx = valid_indices[0]  # 从第一个有效索引开始
+            for i, break_point in enumerate(break_points):
+                end_idx = valid_indices[break_point]  # 当前区间的结束索引
+                intervals.append((start_idx, end_idx))
+                start_idx = valid_indices[break_point + 1]  # 下一个区间的开始索引
+            # 添加最后一个区间
+            intervals.append((start_idx, valid_indices[-1]))
+            # 计算每个区间的长度
+            interval_lengths = [end - start + 1 for start, end in intervals]
+            # 找到最长区间的索引
+            max_len_idx = np.argmax(interval_lengths)
+            max_start_idx, max_end_idx = intervals[max_len_idx]
+            # print(f"最大连续区间: {I[max_start_idx]} to {I[max_end_idx]}")
+            max_interval_range = abs(I[max_start_idx]-I[max_end_idx])
+            return (max_interval_range, max_start_idx, max_end_idx)
             
+        for n in range(20):
+            valid_mask_p = np.ones(len(I_p), dtype=bool)
+            valid_mask_m = np.ones(len(I_m), dtype=bool)
+            for interval in invalid_intervals_p:
+                valid_mask_p = valid_mask_p & ~((I_p>=interval[0]) & (I_p<=interval[1]))
+            for interval in invalid_intervals_m:
+                valid_mask_m = valid_mask_m & ~((I_m>=interval[0]) & (I_m<=interval[1]))
+            
+            # 有效数据区域
+            I_p_valid, V_p_valid = I_p[valid_mask_p], V_p[valid_mask_p]
+            I_m_valid, V_m_valid = I_m[valid_mask_m], V_m[valid_mask_m]
+                       
+
+            # I最大连续的有效区域小于0.6*Ic_interval, 则停止寻找
+            if len(I_p_valid) < 3 or len(I_m_valid) < 3:
+                break
+            if find_max_continuous_interval(I_p, valid_mask_p)[0] < 0.6*Ic_interval:
+                break
+            if find_max_continuous_interval(I_m, valid_mask_m)[0] < 0.6*Ic_interval:
+                break
+
+            index_halfpi_p, phi_p = self.get_phi_halfpi(I_p_valid/I_p_norm, V_p_valid/V_p_norm)
+            index_halfpi_m, phi_m = self.get_phi_halfpi(I_m_valid/I_m_norm, V_m_valid/V_m_norm)
+
+            # print(f'Iteration {n}: Ic_listp candidate: {I_p_valid[index_halfpi_p]}, phi: {phi_p}')
+            # print(f'Iteration {n}: Ic_listm candidate: {I_m_valid[index_halfpi_m]}, phi: {phi_m}')
+
+            # 将找到的Ic_list加入列表
+            Ic_listp.append(I_p_valid[index_halfpi_p])
+            Ic_listm.append(I_m_valid[index_halfpi_m])
+
+            # 将找到的Ic_list加入无效区间
+            invalid_intervals_p.append([I_p_valid[index_halfpi_p]-Ic_interval/2, I_p_valid[index_halfpi_p]+Ic_interval/2])
+            invalid_intervals_m.append([I_m_valid[index_halfpi_m]-Ic_interval/2, I_m_valid[index_halfpi_m]+Ic_interval/2])
+
+        # print(sorted(Ic_listp), sorted(Ic_listm))
+        
+        self.Ic_listp = sorted(Ic_listp)
+        self.Ic_listm = sorted(Ic_listm)
+        
+                    
     def fit_R(self) -> tuple[float, float, float, float]:
         """
-        对IV曲线进行R拟合, 得到Rp和Rm. 对于'R'类型的IV曲线, Rp和Rm相等, 都是根据全局数据拟合的, 并不是正方向分段. 对于'JJu', 筛选V>1.1*Vg的后半段数据进行拟合. 对于'JJo', 筛选I>0.5*Ic的后半段数据进行拟合.
+        对IV曲线进行R拟合, 得到Rp和Rm. 对于'R'类型的IV曲线, Rp和Rm相等, 都是根据全局数据拟合的, 并不是正方向分段. 对于'JJu', 筛选V>1.1*Vg的后半段数据进行拟合. 对于'JJo', 筛选I>Ic的后半段数据进行拟合. 对于'JJs', 筛选I>Ic_max的后半段数据进行拟合.
 
         Returns:
             (R_fitp, R_fitm, Vintcp_p, Vintcp_m): Rp, Rm, Vp, Vm.
@@ -545,6 +725,12 @@ class IVDataProcess:
                 V_mlimit = (-1.1*V_g + V.min()) * 0.5
                 V_data_fitp, I_data_fitp = V[V>V_plimit], I[V>V_plimit] #正方向的R拟合所用数据
                 V_data_fitm, I_data_fitm = V[V<V_mlimit], I[V<V_mlimit] #负方向的R拟合所用数据
+            elif self.curve_type == 'JJs':
+                I_plimit = (max(self.Ic_listp) + I[V<0.9*V_g*len(self.Ic_listp)].max()) * 0.5
+                I_mlimit = (min(self.Ic_listm) + I[V>-0.9*V_g*len(self.Ic_listm)].min()) * 0.5
+                V_data_fitp, I_data_fitp = V[I>I_plimit], I[I>I_plimit] #正方向的R拟合所用数据
+                V_data_fitm, I_data_fitm = V[I<I_mlimit], I[I<I_mlimit] #负方向的R拟合所用数据
+
             elif self.curve_type == 'JJo':
                 I_plimit = (self.Ic_fitp + I[V<0.9*V_g].max()) * 0.5
                 I_mlimit = (self.Ic_fitm + I[V>-0.9*V_g].min()) * 0.5
@@ -841,7 +1027,7 @@ class IVDataProcess:
 
 
         # 数据点,最后画以覆盖前面的辅助线
-        if curve_type == 'R' or curve_type == 'JJo':
+        if curve_type in ['R', 'JJo', 'JJs']:
             if linestyle is None:
                 linestyle = 'o'
             plt.plot(V_plot, I_plot, linestyle, label='data', markersize=2)
@@ -864,7 +1050,10 @@ class IVDataProcess:
         return None
     
     def plot_Ic_spread(self, save_fig: bool=False):
-        if self.curve_type != 'JJa':
+        if self.curve_type not in ['JJa', 'JJs']:
+            return None
+        if self.curve_type == 'JJs':
+            self.plot_Ic_spread_JJs(save_fig=save_fig)
             return None
         
         if not hasattr(self, 'Vg_optimal'):
@@ -898,6 +1087,57 @@ class IVDataProcess:
             plt.savefig(self.file_path.replace(self.filename, figname))
 
         plt.show()
+
+    def plot_Ic_spread_JJs(self, save_fig: bool=False):
+        if self.curve_type != 'JJs':
+            return None
+        if not hasattr(self, 'Ic_listp') or not hasattr(self, 'Ic_listm'):
+            self.get_Ic()
+        I, V = self.I_data, self.V_data
+        Ic_listp, Ic_listm = self.Ic_listp, self.Ic_listm
+
+        #data unit convert for plot
+        I_plot_suffix, I_plot_multiplier = self.number_suffix(I.max())
+        V_plot_suffix, V_plot_multiplier = self.number_suffix(V.max()*10)
+        I_plot = I / I_plot_multiplier
+        V_plot = V / V_plot_multiplier
+
+        colors = plt.cm.viridis(np.linspace(0, 0.8, max(len(Ic_listp), len(Ic_listm))))
+        # 左右两个子图, 分别画正负向的Ic分布
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+        # 正向Ic分布
+        ax1.plot(V_plot, I_plot, 'o', markersize=2, label='data')
+        ax1.set_xlim(left=-V_plot.max()*0.3, right=V_plot.max()*1.1)
+        for n, Ic in enumerate(Ic_listp):
+            Ic_plot = Ic / I_plot_multiplier
+            ax1.hlines(Ic_plot, -V_plot.max()*0.2, V_plot.max(), linestyles='dashed', color=colors[n], label=f'Ic={Ic/1e-6:.4g} uA')
+            ax1.text(-V_plot.max()*0.29, Ic_plot, f'Ic={Ic/1e-6:.4g} uA', fontsize=10, color=colors[n])
+        ax1.set_ylim(bottom=Ic_listp[0]/I_plot_multiplier*0.8, top=Ic_listp[-1]/I_plot_multiplier*1.1)
+        ax1.set_title('Positive Ic Distribution')
+        ax1.set_xlabel('V(' + V_plot_suffix + 'V)')
+        ax1.set_ylabel('I(' + I_plot_suffix + 'A)')
+        ax1.legend()
+        ax1.grid()
+        # 负向Ic分布
+        ax2.plot(V_plot, I_plot, 'o', markersize=2, label='data')
+        ax2.set_xlim(left=V_plot.min()*1.1, right=-V_plot.min()*0.3)
+        for n, Ic in enumerate(Ic_listm[::-1]):
+            Ic_plot = Ic / I_plot_multiplier
+            ax2.hlines(Ic_plot, V_plot.min(), -V_plot.min()*0.2, linestyles='dashed', color=colors[n], label=f'-Ic={Ic/1e-6:.4g} uA')
+            ax2.text(-V_plot.min()*0.21, Ic_plot, f'-Ic={Ic/1e-6:.4g} uA', fontsize=10, color=colors[n])
+        ax2.set_ylim(bottom=Ic_listm[0]/I_plot_multiplier*1.1, top=Ic_listm[-1]/I_plot_multiplier*0.8)
+        ax2.set_title('Negative Ic Distribution')
+        ax2.set_xlabel('V(' + V_plot_suffix + 'V)')
+        ax2.set_ylabel('I(' + I_plot_suffix + 'A)')
+        ax2.legend()
+        ax2.grid()
+        plt.suptitle(self.filename)
+        plt.tight_layout()
+        if save_fig:
+            figname = os.path.splitext(self.filename)[0] + '_Ic_spread_JJs.png'
+            plt.savefig(self.file_path.replace(self.filename, figname))
+        plt.show()
+
 
     def number_suffix(self, num: float) -> tuple[str, float]:
         """
