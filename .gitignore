@@ -3,9 +3,8 @@ SFQ JN 2# 20240924 S24Y2111123
 SFQ JN 8#
 test.py
 test2.py
-T1-df.txt
-B2.txt
 config_input_tab.json
+/测试所用数据
 **/__pycache__/
 *.zip
 *.rar
