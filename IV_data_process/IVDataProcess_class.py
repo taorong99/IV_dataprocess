@@ -331,7 +331,7 @@ class IVDataProcess:
 
     def curve_classifier(self) -> str:
         """
-        判断IV曲线的类型, 并返回. IV曲线的类型有R, JJu, JJo, JJa四种, 将来支持JJs等. 首先根据I_data和V_data在首尾的20个点线性拟合结果, 25%以内认为是R. 如果不是R, 则根据V_data的回滞绝对值是否大于V_g/4和1.5Vg判断是JJu还是JJo.
+        判断IV曲线的类型, 并返回. IV曲线的类型有R, JJu, JJo, JJa四种, 将来支持JJs等. 首先根据I_data和V_data在首尾的20个点线性拟合结果, 25%以内认为是R. 如果不是R, 则根据V_data的回滞绝对值是否大于0.8*V_g和1.5Vg判断是JJu还是JJa.
 
         Returns:
             curve_type(str): IV曲线的类型, 可选R, JJu, JJo.
@@ -353,7 +353,7 @@ class IVDataProcess:
             V_hyster = np.max(abs(V_diff)) # 回滞电压
             if V_hyster > 1.5*self.V_g:
                 curve_type = 'JJa'
-            elif V_hyster > self.V_g/4:
+            elif V_hyster > 0.8*self.V_g:
                 curve_type = 'JJu'
             else:
                 curve_type = 'JJo'
