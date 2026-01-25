@@ -1,6 +1,7 @@
 import os
 import shutil
 import time
+import re
 import logging
 from logging.handlers import RotatingFileHandler
 import matplotlib
@@ -27,6 +28,39 @@ except ImportError as e:
     print(f"警告: 无法导入iv_fit模块: {e}")
     print("将使用原有的process_data函数作为备用")
     IV_FIT_AVAILABLE = False
+
+def custom_secure_filename(filename):
+    """
+    Custom filename sanitization that preserves non-ASCII characters (e.g. Chinese).
+    Replaces secure_filename which strips all non-ASCII.
+    """
+    if not filename:
+        return ""
+    
+    # Decode if bytes
+    if isinstance(filename, bytes):
+        filename = filename.decode("utf-8")
+        
+    # Strip path: take only the basename (stripping both / and \)
+    if '/' in filename:
+        filename = filename.rsplit('/', 1)[-1]
+    if '\\' in filename:
+        filename = filename.rsplit('\\', 1)[-1]
+        
+    # Replace dangerous characters for Windows/Linux filesystems
+    # Forbidden: < > : " / \ | ? *
+    filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+    
+    # Remove control characters
+    filename = "".join(ch for ch in filename if ch.isprintable())
+    
+    # Trim spaces and dots
+    filename = filename.strip().strip('.')
+    
+    if not filename:
+        filename = f"unnamed_file_{int(time.time())}"
+        
+    return filename
 
 app = Flask(__name__)
 
@@ -472,7 +506,8 @@ def upload_files():
             # 清理是否有不安全的文件名
             if not f.filename:
                 continue
-            safe_name = secure_filename(f.filename)
+            # safe_name = secure_filename(f.filename) # secure_filename strips Chinese characters
+            safe_name = custom_secure_filename(f.filename)
             
             # 保存原始文件到inputs文件夹
             input_path = os.path.join(batch_input_folder, safe_name)

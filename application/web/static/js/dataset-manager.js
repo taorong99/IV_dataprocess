@@ -183,8 +183,14 @@ async function displayDataset(username, dataset) {
     // 更新summary_table显示
     updateSummaryTable(dataset);
     
+    const fitFilesCount = resultFiles.filter(url => {
+      const decodedUrl = decodeURIComponent(url);
+      // Check if it ends with _fit.png (ignoring query parameters)
+      return decodedUrl.split('?')[0].endsWith('_fit.png');
+    }).length;
+
     // 更新文件计数
-    updateFileCounts(inputFileCount, resultFiles.length);
+    updateFileCounts(inputFileCount, fitFilesCount);
     
     if (resultFiles.length === 0 && inputFileCount === 0) {
       if (fileList) fileList.innerHTML = '<div class="empty-message">该数据集中暂无文件，请上传。</div>';
