@@ -244,10 +244,10 @@ def process_iv_data(input_folder, output_folder):
         new_files = after_files - original_files
         logger.info(f"新生成文件数量: {len(new_files)}")
         
-        # 筛选出图片文件（.png）并移动到output_folder
+        # 筛选出图片/JSON文件并移动到output_folder
         generated_images = []
         for file in new_files:
-            if file.lower().endswith(('.png', '.jpg', '.jpeg')):
+            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.json')):
                 src_path = os.path.join(input_folder, file)
                 dst_path = os.path.join(output_folder, file)
                 
@@ -543,8 +543,9 @@ def get_upload_progress():
 def process_files():
     username = request.form.get("username", DEFAULT_USER).strip()
     batchname = request.form.get("batchname", "dataset1").strip()
+    render_mode = request.form.get("render_mode", "png").strip()
     
-    logger.info(f"开始处理文件，用户: {username}, 数据集: {batchname}")
+    logger.info(f"开始处理文件，用户: {username}, 数据集: {batchname}, 渲染模式: {render_mode}")
     
     user_input_folder = os.path.join(INPUTS_FOLDER, username)
     user_result_folder = os.path.join(RESULTS_FOLDER, username)
@@ -571,31 +572,49 @@ def process_files():
         processing_results = process_iv_data(batch_input_folder, batch_result_folder)
         
         # 处理结果映射：{filename: [img1, img2, ...]}
-        for filename, generated_images in processing_results.items():
-            if generated_images:
-                # 为每个生成的图片构建URL
+        for filename, generated_files in processing_results.items():
+            if generated_files:
+                # 为每个生成的文件构建URL
                 img_urls = []
-                for img_filename in generated_images:
+                json_urls = []
+                for gen_filename in generated_files:
                     # 对数据集名称和文件名进行URL编码
                     encoded_batchname = urllib.parse.quote(batchname, safe='')
-                    encoded_img_filename = urllib.parse.quote(img_filename, safe='')
-                    rel_path = os.path.join("static", "results", username, encoded_batchname, encoded_img_filename).replace("\\", "/")
-                    # 添加时间戳参数防止缓存
-                    img_url = f"/{rel_path}?_={timestamp}"
-                    img_urls.append(img_url)
+                    encoded_gen_filename = urllib.parse.quote(gen_filename, safe='')
+                    rel_path = os.path.join("static", "results", username, encoded_batchname, encoded_gen_filename).replace("\\", "/")
+                    
+                    # 添加时间戳防止缓存
+                    file_url = f"/{rel_path}?_={timestamp}"
+                    if gen_filename.endswith('.json'):
+                        json_urls.append(file_url)
+                    else:
+                        img_urls.append(file_url)
                 
-                # 如果有多个图片，使用第一个作为主要图片
+                # 如果有多个图片/JSON，提取主文件
                 main_img_url = img_urls[0] if img_urls else ""
-                
-                results.append({
+                main_json_url = ""
+                for j_url in json_urls:
+                    if '_fit.json' in j_url:
+                        main_json_url = j_url
+                        break
+                if not main_json_url and json_urls:
+                    main_json_url = json_urls[0]
+
+                res_info = {
                     "success": True,
                     "filename": filename,
                     "img_url": main_img_url,
                     "img_urls": img_urls,
-                    "message": f"{filename} 拟合成功，生成 {len(generated_images)} 张图片"
-                })
+                    "message": f"{filename} 拟合成功，生成 {len(generated_files)} 个文件"
+                }
+
+                if render_mode == 'echarts':
+                    res_info["json_url"] = main_json_url
+                    res_info["json_urls"] = json_urls
+
+                results.append(res_info)
                 processed_count += 1
-                logger.info(f"文件处理成功: {filename}, 生成图片: {len(generated_images)}张")
+                logger.info(f"文件处理成功: {filename}, 生成文件: {len(generated_files)}个")
             else:
                 results.append({
                     "success": False,
