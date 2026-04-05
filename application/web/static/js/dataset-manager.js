@@ -454,7 +454,13 @@ async function handleProcessDataset() {
       btnProcess.textContent = '处理中...';
     }
     
-    const result = await processDataset(username, dataset);
+    let mode = 'png';
+    if (typeof window.CHART_MODE !== 'undefined') {
+      mode = window.CHART_MODE;
+    }
+    
+    const result = await processDatasetData(username, dataset, mode);
+    console.log('API 返回结果:', result);
     
     if (result.success) {
       const successMsg = `成功处理 ${result.processed} 个文件`;

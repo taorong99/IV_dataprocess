@@ -10,10 +10,19 @@
 
   <!-- 中间：拟合结果预览 -->
   <div class="col" style="height: 100%; display: flex; flex-direction: column;">
-    <div class="section-title">拟合结果预览</div>
+    <div class="section-title" style="display: flex; justify-content: flex-start; align-items: center; gap: 30px;">
+      <span>拟合结果预览</span>
+      <div id="chartModeSwitch" class="btn-group" role="group">
+        <input type="radio" class="btn-check" name="chartMode" id="modePng" value="png" autocomplete="off" checked>
+        <label class="btn btn-outline-primary btn-sm" for="modePng">静态图 (PNG)</label>
+        <input type="radio" class="btn-check" name="chartMode" id="modeEcharts" value="echarts" autocomplete="off">
+        <label class="btn btn-outline-primary btn-sm" for="modeEcharts">交互图 (ECharts)</label>
+      </div>
+    </div>
     <div id="plot-container" style="flex: 1; display: flex; gap: 20px; overflow: hidden;">
-      <div style="flex: 1; height: 100%; overflow: hidden;">
+      <div style="flex: 1; height: 100%; overflow: hidden; position: relative;">
         <img id="plot" src="" alt="拟合图像" style="width: 100%; height: 100%; object-fit: contain; border: 1px solid #ccc; padding: 10px; background: white; border-radius: 8px;">
+        <div id="ivChart" style="width: 100%; height: 100%; display: none; border: 1px solid #ccc; padding: 10px; background: white; border-radius: 8px;"></div>
       </div>
       <div style="width: 33.33%; height: 100%; display: none; overflow: hidden;" id="summaryContainer">
         <div style="height: 100%; display: flex; flex-direction: column; background: white; border: 1px solid #ccc; border-radius: 8px; padding: 15px; overflow: hidden;">

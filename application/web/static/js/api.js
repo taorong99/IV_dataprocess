@@ -86,10 +86,16 @@ async function uploadFiles(username, dataset, files) {
   });
 }
 
+// 旧模块兼容性预留，默认继续使用 png 模式获取结果
 async function processDataset(username, dataset) {
+  return await processDatasetData(username, dataset, 'png');
+}
+
+async function processDatasetData(username, dataset, renderMode = 'echarts') {
   const fd = new FormData();
   fd.append('username', username);
   fd.append('batchname', dataset);
+  fd.append('render_mode', renderMode);
   return await fetchJSON(`${API_BASE}/process`, { 
     method: 'POST', 
     body: fd 
