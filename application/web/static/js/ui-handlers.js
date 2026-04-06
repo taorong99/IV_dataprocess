@@ -28,16 +28,21 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('preferredChartMode', window.CHART_MODE);
         console.log('图表模式已切换为:', window.CHART_MODE);
         
-        // 模式切换时切换显示容器 (Commit-3 详细挂载逻辑会在后面增加)
-        const plotImg = document.getElementById('plot');
-        const ivChart = document.getElementById('ivChart');
-        if (plotImg && ivChart) {
-          if (window.CHART_MODE === 'echarts') {
-            plotImg.style.display = 'none';
-            ivChart.style.display = 'block';
-          } else {
-            plotImg.style.display = 'block';
-            ivChart.style.display = 'none';
+        // 如果数据管理器提供重绘触发器，则主动刷新视图，防止旧数据残留或者未渲染的数据被置空
+        if (window.currentFileViewerHandler && typeof window.currentFileViewerHandler === 'function') {
+          window.currentFileViewerHandler();
+        } else {
+          // 初始化回退保护
+          const plotImg = document.getElementById('plot');
+          const ivChart = document.getElementById('ivChart');
+          if (plotImg && ivChart) {
+            if (window.CHART_MODE === 'echarts') {
+              plotImg.style.display = 'none';
+              ivChart.style.display = 'block';
+            } else {
+              plotImg.style.display = 'block';
+              ivChart.style.display = 'none';
+            }
           }
         }
       }

@@ -214,8 +214,64 @@ async function displayDataset(username, dataset) {
       const btnShow = document.createElement('button');
       btnShow.className = 'btn btn-outline-secondary btn-sm';
       btnShow.textContent = decodeURIComponent(cleanFileName);
-      btnShow.onclick = () => { 
-        if (plotImg) plotImg.src = addCacheBustingParam(fileUrl);
+      btnShow.onclick = async () => { 
+        // 绑定全局图表查看器处理器，根据当前图表模式进行图表渲染
+        window.currentFileViewerHandler = async () => {
+          if (window.CHART_MODE === 'echarts') {
+            const ivChart = document.getElementById('ivChart');
+            if (plotImg) plotImg.style.display = 'none';
+            if (ivChart) ivChart.style.display = 'block';
+
+            try {
+              // 根据图片路径推导对应的JSON数据路径
+              const decodedUrl = decodeURIComponent(cleanFileName);
+              let jsonUrl = '';
+
+              if (decodedUrl.endsWith('_fit.png')) {
+                jsonUrl = addCacheBustingParam(fileUrl.replace('_fit.png', '_fit.json'));
+              } else if (decodedUrl.endsWith('_Ic_spread.png')) {
+                jsonUrl = addCacheBustingParam(fileUrl.replace('_Ic_spread.png', '_Ic_spread.json'));
+              }
+
+              if (jsonUrl) {
+                const res = await fetch(jsonUrl);
+                const jsonData = await res.json();
+                
+                // 根据文件类型选择对应的渲染函数
+                if (decodedUrl.endsWith('_fit.png')) {
+                  renderIVChart(ivChart, jsonData);
+                } else if (decodedUrl.endsWith('_Ic_spread.png')) {
+                  renderIcSpreadChart(ivChart, jsonData);
+                }
+              } else {
+                // 回退逻辑：如果未找到JSON文件，则切回PNG图片显示模式
+                if (plotImg) {
+                  plotImg.style.display = 'block';
+                  plotImg.src = addCacheBustingParam(fileUrl);
+                }
+                if (ivChart) ivChart.style.display = 'none';
+              }
+            } catch (e) {
+              console.error('加载JSON绘制ECharts图表失败, 降级显示为PNG图片', e);
+              if (plotImg) {
+                plotImg.style.display = 'block';
+                plotImg.src = addCacheBustingParam(fileUrl);
+              }
+              if (ivChart) ivChart.style.display = 'none';
+            }
+          } else {
+            // PNG显示模式：直接加载对应的图片
+            const ivChart = document.getElementById('ivChart');
+            if (plotImg) {
+              plotImg.style.display = 'block';
+              plotImg.src = addCacheBustingParam(fileUrl);
+            }
+            if (ivChart) ivChart.style.display = 'none';
+          }
+        };
+
+        // 默认立即调用触发
+        await window.currentFileViewerHandler();
       };
       
       const btnDelete = document.createElement('button');
@@ -267,8 +323,52 @@ async function displayDataset(username, dataset) {
     });
     
     // 显示第一个文件的图像
-    if (resultFiles.length > 0 && plotImg) {
-      plotImg.src = addCacheBustingParam(resultFiles[0]);
+    if (resultFiles.length > 0) {
+      const firstFileUrl = resultFiles[0];
+      const decodedFirst = decodeURIComponent(firstFileUrl.split('/').pop().split('?')[0]);
+      
+      window.currentFileViewerHandler = async () => {
+        const ivChart = document.getElementById('ivChart');
+        if (window.CHART_MODE === 'echarts') {
+          if (plotImg) plotImg.style.display = 'none';
+          if (ivChart) ivChart.style.display = 'block';
+          
+          let jsonUrl = '';
+          if (decodedFirst.endsWith('_fit.png')) {
+            jsonUrl = addCacheBustingParam(firstFileUrl.replace('_fit.png', '_fit.json'));
+          } else if (decodedFirst.endsWith('_Ic_spread.png')) {
+            jsonUrl = addCacheBustingParam(firstFileUrl.replace('_Ic_spread.png', '_Ic_spread.json'));
+          }
+          
+          // 渲染图表
+          if (jsonUrl) {
+            try {
+              const res = await fetch(jsonUrl);
+              const jsonData = await res.json();
+              if (decodedFirst.endsWith('_fit.png')) {
+                renderIVChart(ivChart, jsonData);
+              } else if (decodedFirst.endsWith('_Ic_spread.png')) {
+                renderIcSpreadChart(ivChart, jsonData);
+              }
+            } catch (e) {
+              console.error('加载JSON失败，首图回滚PNG', e);
+              if (plotImg) {
+                plotImg.style.display = 'block';
+                plotImg.src = addCacheBustingParam(firstFileUrl);
+              }
+              if (ivChart) ivChart.style.display = 'none';
+            }
+          }
+        } else {
+          if (plotImg) {
+            plotImg.style.display = 'block';
+            plotImg.src = addCacheBustingParam(firstFileUrl);
+          }
+          if (ivChart) ivChart.style.display = 'none';
+        }
+      };
+
+      await window.currentFileViewerHandler();
     }
     
     // 更新下载按钮状态
