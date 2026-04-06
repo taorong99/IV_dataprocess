@@ -222,42 +222,31 @@ async function displayDataset(username, dataset) {
             if (plotImg) plotImg.style.display = 'none';
             if (ivChart) ivChart.style.display = 'block';
 
-            try {
-              // 根据图片路径推导对应的JSON数据路径
-              const decodedUrl = decodeURIComponent(cleanFileName);
-              let jsonUrl = '';
+            // 根据图片路径推导对应的JSON数据路径
+            const decodedUrl = decodeURIComponent(cleanFileName);
+            let jsonUrl = '';
 
+            if (decodedUrl.endsWith('_fit.png')) {
+              jsonUrl = addCacheBustingParam(fileUrl.replace('_fit.png', '_fit.json'));
+            } else if (decodedUrl.endsWith('_Ic_spread.png')) {
+              jsonUrl = addCacheBustingParam(fileUrl.replace('_Ic_spread.png', '_Ic_spread.json'));
+            }
+
+            if (jsonUrl) {
+              let jsonData = {};
+              // 走客户端数据缓存管理器（内存 + Cache API + fallback 网络请求）
+              try {
+                jsonData = await window.ivChartCache.fetchWithCache(jsonUrl);
+              } catch (e) {
+                console.error('加载JSON数据失败:', e);
+              }
+              
+              // 根据文件类型选择对应的渲染函数 (有无效数据交由ECharts管理器内部提示)
               if (decodedUrl.endsWith('_fit.png')) {
-                jsonUrl = addCacheBustingParam(fileUrl.replace('_fit.png', '_fit.json'));
+                renderIVChart(ivChart, jsonData);
               } else if (decodedUrl.endsWith('_Ic_spread.png')) {
-                jsonUrl = addCacheBustingParam(fileUrl.replace('_Ic_spread.png', '_Ic_spread.json'));
+                renderIcSpreadChart(ivChart, jsonData);
               }
-
-              if (jsonUrl) {
-                const res = await fetch(jsonUrl);
-                const jsonData = await res.json();
-                
-                // 根据文件类型选择对应的渲染函数
-                if (decodedUrl.endsWith('_fit.png')) {
-                  renderIVChart(ivChart, jsonData);
-                } else if (decodedUrl.endsWith('_Ic_spread.png')) {
-                  renderIcSpreadChart(ivChart, jsonData);
-                }
-              } else {
-                // 回退逻辑：如果未找到JSON文件，则切回PNG图片显示模式
-                if (plotImg) {
-                  plotImg.style.display = 'block';
-                  plotImg.src = addCacheBustingParam(fileUrl);
-                }
-                if (ivChart) ivChart.style.display = 'none';
-              }
-            } catch (e) {
-              console.error('加载JSON绘制ECharts图表失败, 降级显示为PNG图片', e);
-              if (plotImg) {
-                plotImg.style.display = 'block';
-                plotImg.src = addCacheBustingParam(fileUrl);
-              }
-              if (ivChart) ivChart.style.display = 'none';
             }
           } else {
             // PNG显示模式：直接加载对应的图片
@@ -342,21 +331,16 @@ async function displayDataset(username, dataset) {
           
           // 渲染图表
           if (jsonUrl) {
+            let jsonData = {};
             try {
-              const res = await fetch(jsonUrl);
-              const jsonData = await res.json();
-              if (decodedFirst.endsWith('_fit.png')) {
-                renderIVChart(ivChart, jsonData);
-              } else if (decodedFirst.endsWith('_Ic_spread.png')) {
-                renderIcSpreadChart(ivChart, jsonData);
-              }
+              jsonData = await window.ivChartCache.fetchWithCache(jsonUrl);
             } catch (e) {
-              console.error('加载JSON失败，首图回滚PNG', e);
-              if (plotImg) {
-                plotImg.style.display = 'block';
-                plotImg.src = addCacheBustingParam(firstFileUrl);
-              }
-              if (ivChart) ivChart.style.display = 'none';
+              console.error('加载JSON失败:', e);
+            }
+            if (decodedFirst.endsWith('_fit.png')) {
+              renderIVChart(ivChart, jsonData);
+            } else if (decodedFirst.endsWith('_Ic_spread.png')) {
+              renderIcSpreadChart(ivChart, jsonData);
             }
           }
         } else {

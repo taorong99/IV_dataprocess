@@ -872,13 +872,13 @@ def serve_result_image(username, dataset, filename):
             return jsonify({"error": "Access denied"}), 403
 
         if os.path.exists(file_path):
-            # logger.info(f"返回图片: {file_path}") # 减少日志噪音
-            # 设置缓存控制头
+            # logger.info(f"返回文件: {file_path}") # 减少日志噪音
+            # .json和.png缓存一小时
             response = send_file(file_path)
             response.headers['Cache-Control'] = 'public, max-age=3600'
             return response
         else:
-            logger.warning(f"图片不存在: {file_path}")
+            logger.warning(f"图形/JSON文件不存在: {file_path}")
             return jsonify({"error": "File not found"}), 404
     except Exception as e:
         logger.error(f"处理图片请求失败: {str(e)}", exc_info=True)
@@ -888,6 +888,18 @@ def serve_result_image(username, dataset, filename):
 def log_request_info():
     """记录每个请求的信息"""
     logger.info(f"请求: {request.method} {request.path} - IP: {request.remote_addr}")
+
+@app.after_request
+def apply_caching_headers(response):
+    """
+    配置 CDN 以及客户端静态文件强缓存。
+    对本地JS文件施加 1天 (86400秒) 的缓存时间。
+    考虑到JS可能没有带版本号，这里去除了 immutable，
+    确保有更新时用户可以通过简单的刷新手段获取最新的脚本。
+    """
+    if request.path.startswith('/static/js/') and request.path.endswith('.js'):
+        response.headers['Cache-Control'] = 'public, max-age=86400'
+    return response
 
 @app.errorhandler(404)
 def not_found_error(error):
